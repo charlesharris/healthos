@@ -240,9 +240,26 @@ immutable, which is what HO §188 and STAT-040/041 actually require.
 Annotation stays editable, evidence stays pinned, and it is still
 declarative.
 
-**Confirm with product** whether notes should be editable at all after
-save; if not, drop these two grants and the tables become plainly
-append-only.
+**Resolved 2026-08-08 (Charles): notes stay editable after save. Keep
+the column-level grants.** The corresponding spec must assert both
+directions — that `notes` is updatable *and* that every pinned column
+is not — since a column-level grant is easy to widen by accident.
+
+### 4a-v. Privileges are applied by a reconcile task, not by migrations
+
+Because `structure.sql` cannot carry ACLs, and because a per-migration
+`GRANT` is exactly the kind of thing that gets forgotten, privileges
+are declared once and reconciled:
+
+- `db/privileges.yml` — the single source of truth: `append_only`,
+  `mutable`, and per-column exceptions
+- `bin/rails db:privileges:apply` — idempotent reconcile, hooked into
+  `db:migrate`, `db:schema:load` and `db:test:prepare`
+- **Default-deny:** `ALTER DEFAULT PRIVILEGES … REVOKE ALL FROM
+  healthos_app`, so a table missing from the manifest is un-writable
+  rather than silently mutable. The failure mode for forgetting a table
+  becomes a loud `INSERT` error in development, not a hole in
+  production.
 
 Three roles, which we need anyway:
 
@@ -254,8 +271,13 @@ Three roles, which we need anyway:
 
 Why this beats a trigger:
 
-- **Declarative.** Visible as grants in `structure.sql`, not procedural
-  code hidden in a migration.
+- **Declarative.** A privilege manifest reconciled by an idempotent
+  task, not procedural code hidden in a migration. Note that grants
+  cannot live in `structure.sql`: ActiveRecord 8.1
+  `PostgreSQLDatabaseTasks#structure_dump` hard-codes
+  `["--schema-only", "--no-privileges", "--no-owner"]`, and `pg_dump`
+  has no way to re-enable ACLs, so privileges must be applied as a
+  separate step in every environment including test. See 4a-v.
 - **Zero per-row cost.** Enforcement is in the privilege check, not an
   executed function on every write.
 - **Unbypassable from the app.** The Rails console connects as
@@ -368,7 +390,7 @@ where it would bottleneck the ingestion hot path for little benefit —
 | D4 | Decision 3a/3b | Unaddressed by the handover. No conflict. |
 | D5 | Decision 4a | Closes a decision HO/epic 001-05 explicitly delegates. Chooses privilege revocation over the trigger the epic names as one option, citing HO §112, S2C-022 and the role separation HO §172 already requires. |
 | D6 | Decision 4b/4c | WORM retention and hash chaining are additive hardening, unaddressed by the handover. No conflict. |
-| D8 | Decision 4a-ii | Column-level `UPDATE` on `investigations.notes` / `case_dispositions.notes`. Needs a product answer on whether notes stay editable after save; HO §81/§46 imply yes, HO §188 requires the pinned columns not move. |
+| D8 | Decision 4a-ii | **Resolved 2026-08-08.** Notes stay editable after save, so column-level `UPDATE` on `investigations.question`/`notes` and `case_dispositions.notes` is retained. Pinned evidence columns stay immutable per HO §188. |
 
 Decision 2 is now **aligned** with HO §111 rather than deviating from
 it; the earlier draft's day-one partitioning is withdrawn.
