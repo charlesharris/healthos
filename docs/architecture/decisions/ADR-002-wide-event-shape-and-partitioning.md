@@ -172,13 +172,77 @@ The question is the **mechanism**.
 REVOKE UPDATE, DELETE ON <append-only tables> FROM healthos_app;
 ```
 
-Applied to: `raw_envelopes`, `observations`, `observation_groups`,
-`derived_signals`, `signals`, `case_events`, `contexts`,
-`context_values`, `comparisons`, `differences`, `findings`,
-`audit_events`, `evidence_sets`, `evidence_items`.
+Classification below is reconciled against the full HO §167 schema
+inventory, so that every table has an explicit verdict rather than an
+implied one.
 
-**Exempt:** `domain_events` (the outbox legitimately updates dispatch
-state, HO §49) and `cases` (the stateful work unit, HO §36).
+**Append-only** (revoke `UPDATE`, `DELETE`):
+
+| Group | Tables | Basis |
+|---|---|---|
+| Raw evidence | `raw_envelopes` | HO §13.1 "RawEnvelope records are append-only"; INV-1 |
+| Canonical telemetry | `observations`, `observation_groups`, `events`, `intervals`, `derived_signals` | INV-2/3; HO §154 "avoid rewriting raw evidence" |
+| Evidence graph | `evidence_sets`, `evidence_items` | INV-3 lineage |
+| Monitoring | `monitor_evaluations`, `signals` | S2C-001; HO §32 is a debugging record of what happened |
+| Case history | `case_events`, `case_dispositions` | S2C-010, S2C-016 (reopen preserves prior disposition) |
+| Analysis artifacts | `contexts`, `context_values`, `baseline_instances`, `comparisons`, `differences`, `findings`, `finding_differences` | HO §50 "completed … immutable analytical artifacts"; HO §119 |
+| Governance | `audit_events` | HO §92 |
+| Investigations | `investigations` | HO §188 lists "saved Investigations mutate" as a do-not-ship condition — see 4a-ii |
+
+**Mutable** (no revocation), with the reason recorded so it is a
+decision rather than an omission:
+
+`organizations`, `users`, `organization_memberships`, `teams`,
+`team_memberships`, `subjects`, `subject_identities`,
+`subject_identifiers`, `sources` (status, last_success/failure),
+`devices`, `monitor_configurations` (per-org enable/disable, HO §31),
+`case_correlation_scopes` (lock row, HO §35), `cases` (the stateful
+work unit, HO §36), `watch_conditions` (satisfied/cancelled, HO §45),
+`workflow_actions` (retry state), `domain_events` (the outbox updates
+dispatch state, HO §49), `integration_credentials` (rotation).
+
+> **Correction.** An earlier draft of this ADR omitted `events`,
+> `intervals`, `monitor_evaluations`, `baseline_instances`,
+> `finding_differences`, `case_dispositions` and `investigations` from
+> the append-only set. All seven are append-only under HO §50/§119.
+> Reconciling against HO §167 rather than working from memory is why
+> the CI assertion below matters.
+
+### 4a-i. Grants require insert-complete artifacts
+
+Revoking `UPDATE` forbids building a row progressively. Every
+analytical artifact must be constructed in memory and inserted
+complete.
+
+This is not a new constraint — HO §99 already requires it: *"Build new
+artifacts off to the side. Then transactionally publish pointers …
+This avoids queue rows observing a half-built analysis."* Grants make
+that discipline enforceable instead of conventional, which is precisely
+the value.
+
+### 4a-ii. Column-level grants where a row is partly annotatable
+
+Two tables are historical records that nonetheless carry user-editable
+prose: `investigations` (`question`, `notes` — HO §81) and
+`case_dispositions` (`notes` — HO §46).
+
+Table-level revocation is too blunt here; it would freeze the notes
+field. PostgreSQL column-level privileges are the exact tool:
+
+```sql
+GRANT UPDATE (question, notes) ON investigations TO healthos_app;
+GRANT UPDATE (notes) ON case_dispositions TO healthos_app;
+```
+
+The pinned columns — `context_id`, `baseline_instance_id`,
+`comparison_id`, `evidence_snapshot_set_id`, `version_tuple` — remain
+immutable, which is what HO §188 and STAT-040/041 actually require.
+Annotation stays editable, evidence stays pinned, and it is still
+declarative.
+
+**Confirm with product** whether notes should be editable at all after
+save; if not, drop these two grants and the tables become plainly
+append-only.
 
 Three roles, which we need anyway:
 
@@ -206,8 +270,33 @@ than a domain error. Mitigated by keeping ActiveRecord `readonly?` in
 front, which produces the clear error and the readable specs. Both
 layers, neither of them a trigger.
 
-Retention deletion runs as `healthos_admin`, making it an explicit
-administrative act rather than an accidental `DELETE`.
+### 4a-iii. Operations that need `healthos_admin`
+
+Revoking `DELETE` moves several legitimate operations to the admin
+role. Recording them now so they are designed rather than discovered:
+
+- **Retention** — including `monitor_evaluations`, where HO §32 notes
+  "retention can later be tuned if evaluation volume becomes high"
+- **Superseded-artifact cleanup** — HO §155 keeps old derived artifacts
+  "if referenced", implying unreferenced ones may eventually be
+  collected
+- **Reprocessing** (HO §155, `bin/rebuild_case_analysis`) — creates new
+  artifacts and moves pointers, so it needs no deletes, but the
+  tooling must run as `app`, not `admin`, to keep that property honest
+
+HO §157 requires support access to be audited; admin-role operations
+are the natural audit boundary.
+
+### 4a-iv. Dev and test must use the same roles
+
+If local development and CI connect as a superuser, the grants are
+never exercised and the first real test of append-only enforcement is
+production. `bin/setup` (HO §126) must create all three roles, and the
+test suite must connect as `healthos_app`.
+
+This also gives HO §119's invariant tests ("CaseEvent timeline
+append-only", "analysis artifacts immutable after completion") a real
+mechanism to assert against rather than a convention.
 
 ### 4b. The raw layer becomes a genuine append-only log
 
@@ -249,7 +338,13 @@ where it would bottleneck the ingestion hot path for little benefit —
 - Epic 001-01 gains three tasks: `structure.sql` schema format, UUIDv7
   generation, and the three-role database setup (`healthos_app` /
   `healthos_migrator` / `healthos_admin`) with grants applied per
-  migration.
+  migration. `bin/setup` creates all three; the test suite connects as
+  `healthos_app` (Decision 4a-iv).
+- HO §124's CI pipeline gains a privileges check alongside its existing
+  "schema consistency" stage.
+- HO §176's PR checklist question *"Does this mutate a historical
+  artifact?"* becomes mechanically checkable rather than reviewer
+  judgement — worth noting in the checklist itself.
 - Epic 001-05's open decision is closed (Decision 4); record it in that
   epic's Decision Log. It also gains WORM/Object Lock configuration on
   the raw payload bucket, and `content_hash` verification on read.
@@ -273,6 +368,7 @@ where it would bottleneck the ingestion hot path for little benefit —
 | D4 | Decision 3a/3b | Unaddressed by the handover. No conflict. |
 | D5 | Decision 4a | Closes a decision HO/epic 001-05 explicitly delegates. Chooses privilege revocation over the trigger the epic names as one option, citing HO §112, S2C-022 and the role separation HO §172 already requires. |
 | D6 | Decision 4b/4c | WORM retention and hash chaining are additive hardening, unaddressed by the handover. No conflict. |
+| D8 | Decision 4a-ii | Column-level `UPDATE` on `investigations.notes` / `case_dispositions.notes`. Needs a product answer on whether notes stay editable after save; HO §81/§46 imply yes, HO §188 requires the pinned columns not move. |
 
 Decision 2 is now **aligned** with HO §111 rather than deviating from
 it; the earlier draft's day-one partitioning is withdrawn.

@@ -301,26 +301,45 @@ What we do commit to now, because these *are* irreversible:
 
 ## Tripwires — when to re-open the columnar decision
 
-HO §6.2 says "until measured workload demonstrates a need" and HO §111
-lists what to instrument — table size, index size, ingestion latency,
-query latency, vacuum behavior, maintenance cost — but neither states a
-threshold. This section supplies the missing thresholds so the decision
-is **deferred with a trigger** rather than deferred on judgment.
+**HO §153 "Scale-Out Triggers" already defines this framework** — "only
+consider service/storage extraction after measurement" — and names
+three qualitative triggers for an analytical store:
 
-Each tripwire maps to a metric HO §111 already requires. Re-open this
-ADR when **any** of them is observed in production or at load-test
-scale.
+> - cohort ContextValue queries dominate Postgres
+> - index/storage growth becomes operationally painful
+> - interactive cohort latency misses product targets
 
-| # | Tripwire | HO §111 metric |
-|---|---|---|
-| T1 | p95 cohort/BREAKDOWN-style query > 2s | query latency |
-| T2 | `observations` exceeds 500M live rows | table size |
-| T3 | `context_values` exceeds 1B live rows | table size |
-| T4 | `differences` exceeds 250M live rows | table size |
-| T5 | Full-org baseline re-materialization exceeds a 1h window | maintenance cost |
-| T6 | Ops Queue p95 render > 1s with the HO §110 indexes in place | query latency |
-| T7 | Autovacuum cannot keep pace on any telemetry table | vacuum behavior |
-| T8 | Ingestion p95 write latency > 250ms | ingestion latency |
+HO §111 separately lists what to instrument (table size, index size,
+ingestion latency, query latency, vacuum behavior, maintenance cost).
+Neither states a number. **T1–T8 below are the quantification of
+HO §153's triggers against HO §111's metrics** — not a new framework.
+
+Re-open this ADR when **any** of them is observed in production or at
+load-test scale.
+
+| # | Tripwire | HO §153 trigger | HO §111 metric |
+|---|---|---|---|
+| T1 | p95 cohort/BREAKDOWN-style query > 2s | interactive cohort latency | query latency |
+| T2 | `observations` exceeds 500M live rows | index/storage growth | table size |
+| T3 | `context_values` exceeds 1B live rows | cohort ContextValue queries dominate | table size |
+| T4 | `differences` exceeds 250M live rows | index/storage growth | table size |
+| T5 | Full-org baseline re-materialization exceeds a 1h window | operationally painful | maintenance cost |
+| T6 | Ops Queue p95 render > 1s with the HO §110 indexes in place | — | query latency |
+| T7 | Autovacuum cannot keep pace on any telemetry table | operationally painful | vacuum behavior |
+| T8 | Ingestion p95 write latency > 250ms | (HO §153 ingestion-service trigger) | ingestion latency |
+
+Two other HO §153 extraction candidates are **out of scope for this
+ADR** and should not be conflated with the storage question:
+
+- **Ingestion service** — triggered by throughput or a customer-side
+  collector requirement, not by storage shape. T8 is the closest
+  signal.
+- **Specialized statistics service** — triggered by "methods require
+  libraries unavailable/awkward in Ruby." Worth watching from Epic 003
+  onward: median/MAD, robust standardized effect and leave-one-out
+  sensitivity are all comfortable in Ruby, but if the domain ever needs
+  methods that are not, that is a compute decision, not a storage one.
+  HO §153: "Rails remains control plane unless proven otherwise."
 
 T1 and T3 are the expected first movers, and both point at Cohort
 Explorer (M12) rather than at the operational or investigative paths.
@@ -392,7 +411,7 @@ require sign-off:
 | # | Section | Relationship to source |
 |---|---|---|
 | D1 | §3 Timescale | HO §6.2 excludes it "until measured workload demonstrates a need." This ADR argues continuous aggregates are excluded on **invariant** grounds (INV-3, INV-13/14) that workload can never satisfy. Strengthens §6.2; does not contradict it. |
-| D2 | Tripwires | HO §6.2/§111 defer on measured need but state no thresholds. This ADR supplies T1–T8 against the metrics HO §111 already requires. Additive. |
+| D2 | Tripwires | HO §153 defines the trigger framework qualitatively and HO §111 lists the metrics; neither states a number. T1–T8 quantify §153's triggers against §111's metrics. Additive, and weaker than it first appeared — the framework is the handover's, only the thresholds are ours. |
 | D7 | §4 Kafka entry point | HO §6.2 excludes Kafka pending measured need. This ADR names T1/T3 as that measurement and fixes its role as CDC transport for the columnar migration, never as an ingestion-path component. Additive. |
 
 An earlier draft also proposed a day-one JSONB projection on `contexts`
