@@ -16,9 +16,9 @@ class CreateDomainEvents < ActiveRecord::Migration[8.1]
     create_table :domain_events, id: :uuid, default: -> { "uuidv7()" } do |t|
       t.references :organization, null: false, foreign_key: true, type: :uuid
 
-      t.string :aggregate_type, null: false
+      t.text :aggregate_type, null: false
       t.uuid :aggregate_id, null: false
-      t.string :event_type, null: false
+      t.text :event_type, null: false
 
       # IDs and non-PHI metadata only. CLAUDE.md: "No PHI in technical logs,
       # job arguments, metric labels, or error reports. Pass IDs to jobs,

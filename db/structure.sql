@@ -33,9 +33,9 @@ CREATE TABLE public.ar_internal_metadata (
 CREATE TABLE public.domain_events (
     id uuid DEFAULT uuidv7() NOT NULL,
     organization_id uuid NOT NULL,
-    aggregate_type character varying NOT NULL,
+    aggregate_type text NOT NULL,
     aggregate_id uuid NOT NULL,
-    event_type character varying NOT NULL,
+    event_type text NOT NULL,
     payload jsonb DEFAULT '{}'::jsonb NOT NULL,
     occurred_at timestamp(6) without time zone NOT NULL,
     dispatched_at timestamp(6) without time zone,
@@ -53,16 +53,16 @@ CREATE TABLE public.domain_events (
 CREATE TABLE public.invitations (
     id uuid DEFAULT uuidv7() NOT NULL,
     organization_id uuid NOT NULL,
-    email_address character varying NOT NULL,
-    role character varying NOT NULL,
-    token_digest character varying NOT NULL,
+    email_address text NOT NULL,
+    role text NOT NULL,
+    token_digest text NOT NULL,
     invited_by_id uuid NOT NULL,
     expires_at timestamp(6) without time zone NOT NULL,
     accepted_at timestamp(6) without time zone,
     accepted_by_id uuid,
     created_at timestamp(6) without time zone NOT NULL,
     updated_at timestamp(6) without time zone NOT NULL,
-    CONSTRAINT invitations_role_check CHECK (((role)::text = ANY ((ARRAY['organization_admin'::character varying, 'clinical_ops'::character varying, 'clinician'::character varying, 'analyst'::character varying, 'support_limited'::character varying])::text[])))
+    CONSTRAINT invitations_role_check CHECK ((role = ANY (ARRAY['organization_admin'::text, 'clinical_ops'::text, 'clinician'::text, 'analyst'::text, 'support_limited'::text])))
 );
 
 
@@ -74,14 +74,14 @@ CREATE TABLE public.organization_memberships (
     id uuid DEFAULT uuidv7() NOT NULL,
     organization_id uuid NOT NULL,
     user_id uuid NOT NULL,
-    role character varying NOT NULL,
-    status character varying DEFAULT 'active'::character varying NOT NULL,
+    role text NOT NULL,
+    status text DEFAULT 'active'::text NOT NULL,
     invited_at timestamp(6) without time zone,
     joined_at timestamp(6) without time zone,
     created_at timestamp(6) without time zone NOT NULL,
     updated_at timestamp(6) without time zone NOT NULL,
-    CONSTRAINT organization_memberships_role_check CHECK (((role)::text = ANY ((ARRAY['organization_admin'::character varying, 'clinical_ops'::character varying, 'clinician'::character varying, 'analyst'::character varying, 'support_limited'::character varying])::text[]))),
-    CONSTRAINT organization_memberships_status_check CHECK (((status)::text = ANY ((ARRAY['invited'::character varying, 'active'::character varying, 'suspended'::character varying])::text[])))
+    CONSTRAINT organization_memberships_role_check CHECK ((role = ANY (ARRAY['organization_admin'::text, 'clinical_ops'::text, 'clinician'::text, 'analyst'::text, 'support_limited'::text]))),
+    CONSTRAINT organization_memberships_status_check CHECK ((status = ANY (ARRAY['invited'::text, 'active'::text, 'suspended'::text])))
 );
 
 
@@ -91,12 +91,12 @@ CREATE TABLE public.organization_memberships (
 
 CREATE TABLE public.organizations (
     id uuid DEFAULT uuidv7() NOT NULL,
-    name character varying NOT NULL,
-    slug character varying NOT NULL,
-    status character varying DEFAULT 'active'::character varying NOT NULL,
+    name text NOT NULL,
+    slug text NOT NULL,
+    status text DEFAULT 'active'::text NOT NULL,
     created_at timestamp(6) without time zone NOT NULL,
     updated_at timestamp(6) without time zone NOT NULL,
-    CONSTRAINT organizations_status_check CHECK (((status)::text = ANY ((ARRAY['active'::character varying, 'suspended'::character varying])::text[])))
+    CONSTRAINT organizations_status_check CHECK ((status = ANY (ARRAY['active'::text, 'suspended'::text])))
 );
 
 
@@ -116,8 +116,8 @@ CREATE TABLE public.schema_migrations (
 CREATE TABLE public.sessions (
     id uuid DEFAULT uuidv7() NOT NULL,
     user_id uuid NOT NULL,
-    ip_address character varying,
-    user_agent character varying,
+    ip_address text,
+    user_agent text,
     created_at timestamp(6) without time zone NOT NULL,
     updated_at timestamp(6) without time zone NOT NULL
 );
@@ -144,11 +144,11 @@ CREATE TABLE public.team_memberships (
 CREATE TABLE public.teams (
     id uuid DEFAULT uuidv7() NOT NULL,
     organization_id uuid NOT NULL,
-    name character varying NOT NULL,
-    status character varying DEFAULT 'active'::character varying NOT NULL,
+    name text NOT NULL,
+    status text DEFAULT 'active'::text NOT NULL,
     created_at timestamp(6) without time zone NOT NULL,
     updated_at timestamp(6) without time zone NOT NULL,
-    CONSTRAINT teams_status_check CHECK (((status)::text = ANY ((ARRAY['active'::character varying, 'archived'::character varying])::text[])))
+    CONSTRAINT teams_status_check CHECK ((status = ANY (ARRAY['active'::text, 'archived'::text])))
 );
 
 
@@ -158,13 +158,13 @@ CREATE TABLE public.teams (
 
 CREATE TABLE public.users (
     id uuid DEFAULT uuidv7() NOT NULL,
-    email_address character varying NOT NULL,
-    password_digest character varying NOT NULL,
-    full_name character varying,
-    status character varying DEFAULT 'active'::character varying NOT NULL,
+    email_address text NOT NULL,
+    password_digest text NOT NULL,
+    full_name text,
+    status text DEFAULT 'active'::text NOT NULL,
     created_at timestamp(6) without time zone NOT NULL,
     updated_at timestamp(6) without time zone NOT NULL,
-    CONSTRAINT users_status_check CHECK (((status)::text = ANY ((ARRAY['active'::character varying, 'disabled'::character varying])::text[])))
+    CONSTRAINT users_status_check CHECK ((status = ANY (ARRAY['active'::text, 'disabled'::text])))
 );
 
 

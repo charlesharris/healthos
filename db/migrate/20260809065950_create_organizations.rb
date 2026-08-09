@@ -4,9 +4,9 @@
 class CreateOrganizations < ActiveRecord::Migration[8.1]
   def change
     create_table :organizations, id: :uuid, default: -> { "uuidv7()" } do |t|
-      t.string :name, null: false
-      t.string :slug, null: false
-      t.string :status, null: false, default: "active"
+      t.text :name, null: false
+      t.text :slug, null: false
+      t.text :status, null: false, default: "active"
 
       t.timestamps
     end

@@ -408,3 +408,48 @@ compose and CI now pin `postgres:18.4-alpine`. This was not the cause
 here — both happened to resolve to 18.4 — but it is the same class of
 problem and would eventually have produced drift that looked like a
 code change.
+
+### 2026-08-09 — text, not varchar (schema round-trip)
+
+The remaining CI drift was not a version mismatch after all, and the
+pg_dump fix above — while correct on its own terms — did not change the
+diff at all.
+
+**A CHECK constraint on a `character varying` column is not round-trip
+stable.** PostgreSQL normalizes `status IN ('a','b')` on a varchar
+column to
+
+```
+(status)::text = ANY ((ARRAY['a'::character varying, ...])::text[])
+```
+
+and re-parsing that dumped text produces a *different* internal
+expression, which dumps as
+
+```
+(status)::text = ANY (ARRAY[('a'::character varying)::text, ...])
+```
+
+So a database built by running migrations and one built by loading
+`structure.sql` yield different dumps. Locally the schema came from
+migrations; in CI `db:prepare` loads the dump. Same schema, different
+text, and a diff that reads like a schema change.
+
+On a `text` column the same constraint renders as
+`status = ANY (ARRAY['a'::text, 'b'::text])`, which is a fixed point.
+Verified directly against the server before changing anything.
+
+All migrations now use `t.text`. PostgreSQL's documentation notes there
+is no performance difference between the two types, and `text` is the
+idiomatic choice; the only reason `t.string` was there is that it is the
+Rails default.
+
+`spec/database/schema_conventions_spec.rb` now guards this, along with
+uuidv7 primary-key defaults and NOT NULL `organization_id` on every
+tenant-facing table. Diagnosing this took three CI rounds, so the guard
+earns its place: the failure surfaces far from its cause, and looks like
+a schema change rather than a type choice.
+
+Note also that `db:migrate` on an empty database does not run migrations
+— `initialize_database` loads `structure.sql` instead. Building a schema
+genuinely from migrations requires the dump to be absent.

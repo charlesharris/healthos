@@ -16,9 +16,9 @@ class CreateInvitations < ActiveRecord::Migration[8.1]
   def change
     create_table :invitations, id: :uuid, default: -> { "uuidv7()" } do |t|
       t.references :organization, null: false, foreign_key: true, type: :uuid
-      t.string :email_address, null: false
-      t.string :role, null: false
-      t.string :token_digest, null: false
+      t.text :email_address, null: false
+      t.text :role, null: false
+      t.text :token_digest, null: false
       t.references :invited_by, null: false, type: :uuid,
         foreign_key: { to_table: :users }
       t.datetime :expires_at, null: false

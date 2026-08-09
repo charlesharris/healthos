@@ -6,8 +6,8 @@ class CreateTeams < ActiveRecord::Migration[8.1]
   def change
     create_table :teams, id: :uuid, default: -> { "uuidv7()" } do |t|
       t.references :organization, null: false, foreign_key: true, type: :uuid
-      t.string :name, null: false
-      t.string :status, null: false, default: "active"
+      t.text :name, null: false
+      t.text :status, null: false, default: "active"
 
       t.timestamps
     end

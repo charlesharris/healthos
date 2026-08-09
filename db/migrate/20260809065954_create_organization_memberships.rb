@@ -16,8 +16,8 @@ class CreateOrganizationMemberships < ActiveRecord::Migration[8.1]
     create_table :organization_memberships, id: :uuid, default: -> { "uuidv7()" } do |t|
       t.references :organization, null: false, foreign_key: true, type: :uuid
       t.references :user, null: false, foreign_key: true, type: :uuid
-      t.string :role, null: false
-      t.string :status, null: false, default: "active"
+      t.text :role, null: false
+      t.text :status, null: false, default: "active"
       t.datetime :invited_at
       t.datetime :joined_at
 
