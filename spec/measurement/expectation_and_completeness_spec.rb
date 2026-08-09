@@ -152,6 +152,66 @@ RSpec.describe "Measurement expectation and completeness", type: :model do
     end
   end
 
+  # Resolved 2026-08-09 (Charles). SC §14 is silent on where these three
+  # states sit, and the answer moves comparisons across STAT-012's bands.
+  describe "the completeness denominator decision (SC §14, STAT-012)" do
+    it "counts an invalid measurement against completeness" do
+      observe("2026-03-02")
+      observe("2026-03-03", quality_state: "invalid_measurement")
+
+      # The protocol wanted a usable reading and did not get one. That an
+      # attempt happened does not make the day measured.
+      expect(completeness.usable).to eq(1)
+      expect(completeness.expected_total).to eq(7)
+    end
+
+    it "counts an unknown state against completeness" do
+      observe("2026-03-02")
+      observe("2026-03-03", quality_state: "unknown")
+
+      # Assuming the opportunity was met would inflate completeness on the
+      # strength of ignorance.
+      expect(completeness.expected_total).to eq(7)
+      expect(completeness.usable).to eq(1)
+    end
+
+    it "removes a day excluded by rule from the denominator entirely" do
+      observe("2026-03-02")
+      observe("2026-03-03", quality_state: "excluded_by_rule")
+
+      # We chose to discard that reading. Charging the subject's completeness
+      # for our own exclusion would double-count it — once by dropping the
+      # value, again by making the day look missed.
+      expect(completeness.expected_total).to eq(6)
+      expect(completeness.usable).to eq(1)
+    end
+
+    it "does not exempt a day that also produced a usable reading" do
+      observe("2026-03-02")
+      observe("2026-03-02", hour: 20, quality_state: "excluded_by_rule")
+
+      # The exclusion of one reading does not excuse the day.
+      expect(completeness.expected_total).to eq(7)
+      expect(completeness.usable).to eq(1)
+    end
+
+    it "reports indeterminate when every expected day was excluded by rule" do
+      (2..8).each { |d| observe(format("2026-03-%02d", d), quality_state: "excluded_by_rule") }
+
+      # A ratio over an empty denominator is not a low score, it is no
+      # measurement at all.
+      expect(completeness).to be_indeterminate
+      expect(completeness.reason).to eq("every_expected_day_excluded_by_rule")
+    end
+
+    it "keeps the decision in one governed constant" do
+      # STAT-044: changing this changes every completeness ratio in the
+      # system, so it must be one reviewable line rather than logic scattered
+      # through the calculation.
+      expect(Measurement::Completeness::DENOMINATOR_EXEMPT_STATES).to eq(%w[excluded_by_rule])
+    end
+  end
+
   describe "indeterminate completeness" do
     # A ratio of 0 would say "they measured nothing"; a ratio of 1 would say
     # "they measured everything expected". Both are assertions we cannot make

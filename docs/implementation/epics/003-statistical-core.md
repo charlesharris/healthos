@@ -166,14 +166,36 @@ offset so the harness stays Rails-free. Defaults are negative-offset so
 the evening slot lands on the *next* UTC day — an engine that groups by
 UTC date instead of subject-local date fails loudly (HO §121).
 
-**⚠️ Contract ambiguity found — needs a human decision (003-14).**
+**Contract ambiguity — RESOLVED 2026-08-09 (Charles).**
 SC §14 defines completeness over "expected opportunities" but does not
 say where `invalid_measurement`, `excluded_by_rule` and `unknown` sit.
-The harness counts everything except `not_expected` in the denominator,
-matching `Observation::EXPECTED_BUT_ABSENT_STATES`. This is a
-*statistical* decision, not an implementation detail: it changes every
-completeness ratio and therefore which STAT-012 gate a comparison
-falls into. Recorded rather than settled — confirm before 003-14.
+This is a *statistical* decision, not an implementation detail: it moves
+comparisons across STAT-012's 40/60/80 bands and therefore decides
+whether a Difference can reach MODERATE or STRONG.
+
+Resolved as:
+
+- `invalid_measurement` — **counts against** completeness. The protocol
+  wanted a usable reading and did not get one; that an attempt happened
+  does not make the day measured.
+- `unknown` — **counts against**. Assuming the opportunity was met would
+  inflate completeness on the strength of ignorance.
+- `excluded_by_rule` — **removed from the denominator**. We chose to
+  discard that reading, and charging the subject's completeness for our
+  own exclusion double-counts it: once by dropping the value, again by
+  making the day look missed.
+
+Implemented as the single constant
+`Measurement::Completeness::DENOMINATOR_EXEMPT_STATES`, with a spec
+asserting its contents — changing it changes every completeness ratio in
+the system, so STAT-044 requires it be one reviewable line rather than
+logic scattered through a calculation. A day whose readings are *all*
+excluded is exempt; a day that also produced a usable reading is not.
+When every expected day is excluded the result is indeterminate rather
+than zero, because a ratio over an empty denominator is not a low score
+— it is no measurement at all.
+
+The harness's own denominator note is now superseded by this.
 
 **Process note:** a `git add -A` on the main thread swept 19 of these
 files into commit `663235e` ("001-11: case correlation"), whose message
