@@ -1,0 +1,68 @@
+# Hypertension domain pack semantics (HO §24).
+#
+# Everything disease-shaped lives here, never in platform core (INV-35).
+#
+# NON-CLINICAL: any threshold or effect-magnitude value in this pack is an
+# engineering fixture, not a clinical parameter. HO §175 requires review and
+# promotion before pilot; prototype-scope.md keeps that gate closed.
+
+definitions:
+  - key: health.vital.blood_pressure.systolic
+    version: 1
+    kind: vital
+    value_type: numeric
+    unit: mmHg
+    privacy_class: phi
+    aggregation: median
+    # SC §49-50: systolic and diastolic share a semantic family, so a shift in
+    # both is ONE finding, not two independent confirmations (STAT-033).
+    semantic_family: blood_pressure
+    derivation_family: direct_measurement
+    expected_measurement: daily_opportunity
+
+  - key: health.vital.blood_pressure.diastolic
+    version: 1
+    kind: vital
+    value_type: numeric
+    unit: mmHg
+    privacy_class: phi
+    aggregation: median
+    semantic_family: blood_pressure
+    derivation_family: direct_measurement
+    expected_measurement: daily_opportunity
+
+  - key: health.vital.pulse
+    version: 1
+    kind: vital
+    value_type: numeric
+    unit: bpm
+    privacy_class: phi
+    aggregation: median
+    # Deliberately a different semantic family from blood pressure: pulse
+    # moving alongside BP IS independent support and may raise evidence by at
+    # most one level (STAT-034).
+    semantic_family: heart_rate
+    derivation_family: direct_measurement
+    expected_measurement: daily_opportunity
+
+  - key: health.vital.blood_pressure.daily_summary
+    version: 1
+    kind: derived
+    value_type: numeric
+    unit: mmHg
+    privacy_class: phi
+    aggregation: median
+    semantic_family: blood_pressure
+    # A daily summary is derived FROM the direct measurements, so it shares a
+    # derivation family with them — a shift in both is correlated, not
+    # confirmatory (STAT-033).
+    derivation_family: direct_measurement
+
+  - key: health.vital.blood_pressure.variability
+    version: 1
+    kind: derived
+    value_type: numeric
+    unit: mmHg
+    privacy_class: phi
+    semantic_family: blood_pressure
+    derivation_family: dispersion

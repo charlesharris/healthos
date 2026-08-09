@@ -92,12 +92,12 @@ semantics in Epic 002); provenance invariants 1–3.
       normalization enqueue (S2C-020; §14)
 
 ### 001-06 Semantic registry v0
-- [ ] Code/YAML-defined registry with key, version, kind, value type,
+- [x] Code/YAML-defined registry with key, version, kind, value type,
       unit, privacy class; immutable by version
-- [ ] Keys: `health.vital.blood_pressure.systolic`, `.diastolic`,
+- [x] Keys: `health.vital.blood_pressure.systolic`, `.diastolic`,
       `health.vital.pulse`, plus `health.measurement.*` keys reserved
-- [ ] `bin/definitions verify` digest tooling + CI check (§125)
-- [ ] Spec: changing a definition without version bump fails verify
+- [x] `bin/definitions verify` digest tooling + CI check (§125)
+- [x] Spec: changing a definition without version bump fails verify
 
 ### 001-07 Canonical telemetry (BP path only)
 - [ ] `observation_groups`, `observations` per §16–17 including
@@ -603,3 +603,53 @@ commented out.
 dev/test, which broke `assets:precompile` in the Docker image build
 (tests were green; `build_image` caught it). It now honours
 `SECRET_KEY_BASE_DUMMY`, the signal Rails uses for that build context.
+
+### 2026-08-09 — 001-06 semantic registry and digest gate
+
+**The digest is computed over normalized content, not raw text.** Keys
+sorted, symbols and strings unified, integral floats collapsed,
+formatting discarded. A digest over raw bytes would fail CI when someone
+reindents a YAML file, which trains people to bump versions reflexively
+— and a version bump that means nothing destroys exactly the signal
+HO §125 depends on. Array order is preserved, since for allowed-value
+lists and rule pipelines order can be semantic.
+
+**Three distinct failure modes, deliberately not collapsed into one:**
+
+- `CHANGED` — content moved while the version stayed put. The case the
+  gate exists for: every artifact already computed under that
+  key@version now means something subtly different, breaking INV-6..12
+  invisibly.
+- `REMOVED` — historical artifacts reference a version forever, so
+  deleting one makes them unreproducible.
+- `ADDED` — legitimate; the lockfile just has to move in the same
+  commit. Reported separately and does not count as drift, because
+  conflating "you added a definition" with "you silently changed one"
+  would make the alarming case unremarkable.
+
+**Verified against a real edit, not only in spec.** Changing
+`aggregation: median` to `mean` in the hypertension pack without a
+version bump makes `bin/definitions verify` exit 1 and name all four
+affected definitions. Wired into CI ahead of the test run.
+
+**Difference-family metadata lives on the definition** (SC §49–50).
+Systolic and diastolic share a semantic family, so a shift in both is
+one finding rather than two confirmations (STAT-033); pulse sits in a
+different family, so it is genuine independent support and may raise
+evidence at most one level (STAT-034); a daily summary shares a
+derivation family with its inputs, so it is correlated with them rather
+than confirmatory. Putting this on the definition means the epic 003/004
+aggregation rules never need a schema change to enforce it.
+
+**Domain neutrality is asserted, not assumed.** A spec reads
+`config/semantics/core.yml` directly and fails if any core key is
+anything other than `health.measurement.*` — blood pressure would not
+survive CLAUDE.md's "would this make sense for post-op recovery or
+oncology?" test, so it lives in the domain pack (INV-35).
+
+Definitions are frozen at construction and the digest is computed
+eagerly — memoizing it later mutates a frozen object, and a definition
+that cannot be digested should fail at load rather than at first use.
+
+Zeitwerk note: `app/definitions/` is its own autoload root, so
+`Definitions::Registry` had to move to `app/services/definitions/`.

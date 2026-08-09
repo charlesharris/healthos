@@ -1,0 +1,75 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+# Versioned-definition tooling (HO §125, §126).
+#
+#   bin/definitions verify   compare current digests against the lockfile
+#   bin/definitions update   rewrite the lockfile (after an intentional change)
+#   bin/definitions list     show every definition and its digest
+
+require_relative "../config/environment"
+
+command = ARGV.first || "verify"
+verifier = Definitions::Verifier.new
+
+case command
+when "verify"
+  result = verifier.call
+
+  if result.ok?
+    count = Definitions::Registry.instance.all.size
+    puts "definitions verified: #{count} definition(s), all digests match"
+    exit 0
+  end
+
+  warn "Definition digest verification FAILED"
+
+  if result.changed.any?
+    warn "\n  CHANGED — content edited without a version bump:"
+    result.changed.each do |entry|
+      warn "    #{entry[:key]}"
+      warn "      recorded: #{entry[:recorded]}"
+      warn "      current:  #{entry[:current]}"
+    end
+    warn "\n  Definitions are immutable by version (HO §23). Every artifact already"
+    warn "  computed under this key@version would silently mean something else."
+    warn "  Add a NEW version instead of editing this one."
+  end
+
+  if result.removed.any?
+    warn "\n  REMOVED — definitions that historical artifacts still reference:"
+    result.removed.each { |key| warn "    #{key}" }
+    warn "\n  Removing a version makes existing artifacts unreproducible."
+  end
+
+  if result.added.any?
+    warn "\n  ADDED — new definitions not yet in the lockfile:"
+    result.added.each { |key| warn "    #{key}" }
+    warn "\n  This is fine, but run `bin/definitions update` and commit the"
+    warn "  lockfile alongside the definition."
+  end
+
+  exit 1
+
+when "update"
+  before = verifier.read_lockfile
+  after = verifier.write_lockfile!
+
+  changed = after.select { |k, v| before.key?(k) && before[k] != v }
+  if changed.any?
+    warn "WARNING: rewrote digests for definitions that already existed:"
+    changed.each_key { |k| warn "  #{k}" }
+    warn "If you did not intend a behaviour change, add a new version instead."
+  end
+
+  puts "lockfile updated: #{after.size} definition(s)"
+
+when "list"
+  Definitions::Registry.instance.all.sort_by(&:versioned_key).each do |d|
+    puts format("%-52s %-14s %s", d.versioned_key, d.privacy_class, d.digest[0, 16])
+  end
+
+else
+  warn "usage: bin/definitions [verify|update|list]"
+  exit 2
+end

@@ -1,0 +1,17 @@
+---
+generated_by: bin/definitions update
+note: Recorded digests for versioned definitions (HO §25, §125). Do not hand-edit.
+  A changed digest for an existing key@version means a definition was modified without
+  a version bump.
+digests:
+  health.measurement.completeness@v1: 61c220f268c1958a38fe8b7049209ed47ff191e006b0ee5d45827f56f9972131
+  health.measurement.days_since_last@v1: 3df0f0aee516e32c57695a04da80b40295c32c45119a10905d0501a3c09329a8
+  health.measurement.frequency@v1: 6bd5a82d3424e73c2d1aa2d69363c69e98df62b85bb8cb48a67ee3873204a554
+  health.measurement.manual_entry_frequency@v1: 9cfa9a40f0c6410738eae754634cf1eab2c18ec624ec006b30ae1dff4e3dfbdb
+  health.measurement.recording_method_changed@v1: 8d5279863168c32a8730a576157adf7ade00fb6969b2ed8602074d8983e246a1
+  health.measurement.source_changed@v1: b774b2a97f36f311a534876fe7bb14ee3e0616c30d505e94defc547d530dc818
+  health.vital.blood_pressure.daily_summary@v1: 8e749be3f7873bc17b96ff1ef7b74e02a23865659fa9e3c0a193706c0804ae34
+  health.vital.blood_pressure.diastolic@v1: f1e1d2c503d8bb5369c31190d313e92f6aa80aeec594555ca5f2e88c236be3b7
+  health.vital.blood_pressure.systolic@v1: 117fff850850ac39713af9fbd7eb40561cccafb26b4dd95e26fd34f6294c0630
+  health.vital.blood_pressure.variability@v1: b699a5626b1cd7c16c571b99ae589b2d68d60181fcdebc5f957397229d336368
+  health.vital.pulse@v1: 0453f2c8816721ef0c274af6e38ac76451f71ba8e2df2ad77db41ca982877553

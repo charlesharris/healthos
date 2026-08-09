@@ -147,6 +147,14 @@ jobs:
           bin/rails db:migrate
           git diff --exit-code db/structure.sql
 
+      # HO §125. Fails if a versioned definition's content changed while its
+      # key and version stayed the same — which would silently reinterpret
+      # every artifact already computed under it (INV-6..12).
+      - name: Verify definition digests
+        env:
+          HEALTHOS_DB_USER: healthos_migrator
+        run: bin/definitions verify
+
       # Runs as healthos_app (the database.yml default), so append-only
       # enforcement is exercised by every example — ADR-002 Decision 4a-iv.
       # spec/database/privileges_spec.rb is the HO §124 privileges check.

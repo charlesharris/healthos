@@ -1,0 +1,75 @@
+# Platform-core semantic definitions (HO §23).
+#
+# Core stays domain-neutral (INV-35). Nothing here assumes hypertension, or
+# any disease: the test CLAUDE.md sets is "would this still make sense for
+# post-op recovery or oncology?" Measurement-behaviour keys belong here rather
+# than in a domain pack precisely because measurement is observable for every
+# domain (STAT-003).
+#
+# Definitions are IMMUTABLE BY VERSION. To change behaviour, add a new version
+# — do not edit an existing one. `bin/definitions verify` fails CI if content
+# changes while key and version stay the same (HO §25, §125).
+
+definitions:
+  - key: health.measurement.frequency
+    version: 1
+    kind: measurement
+    value_type: numeric
+    unit: measurements_per_day
+    privacy_class: operational
+    semantic_family: measurement_behavior
+    derivation_family: measurement_cadence
+    description: >
+      How often measurements were recorded. Measurement behaviour is itself
+      analyzable data (STAT-003), not merely metadata about the real signal.
+
+  - key: health.measurement.completeness
+    version: 1
+    kind: measurement
+    value_type: numeric
+    unit: ratio
+    privacy_class: operational
+    semantic_family: measurement_behavior
+    derivation_family: completeness
+    description: >
+      Usable expected opportunities divided by total expected opportunities
+      (SC §14). Requires an explicit denominator (STAT-011); the ratio alone
+      is never sufficient.
+
+  - key: health.measurement.days_since_last
+    version: 1
+    kind: measurement
+    value_type: numeric
+    unit: days
+    privacy_class: operational
+    semantic_family: measurement_behavior
+    derivation_family: measurement_cadence
+
+  - key: health.measurement.source_changed
+    version: 1
+    kind: measurement
+    value_type: boolean
+    privacy_class: operational
+    semantic_family: measurement_behavior
+    derivation_family: instrumentation
+    description: >
+      Whether the recording source changed within the window. Instrumentation
+      changes are evaluated before biology (STAT-007) and can cap or suppress
+      biological evidence entirely (STAT-008, STAT-009).
+
+  - key: health.measurement.recording_method_changed
+    version: 1
+    kind: measurement
+    value_type: boolean
+    privacy_class: operational
+    semantic_family: measurement_behavior
+    derivation_family: instrumentation
+
+  - key: health.measurement.manual_entry_frequency
+    version: 1
+    kind: measurement
+    value_type: numeric
+    unit: ratio
+    privacy_class: operational
+    semantic_family: measurement_behavior
+    derivation_family: measurement_cadence
