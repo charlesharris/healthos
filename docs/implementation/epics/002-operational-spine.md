@@ -110,6 +110,47 @@ land), bulk clinical actions.
 
 ## Decision Log
 
+### 2026-08-09 — PHI leakage test (epic 001 gate item, now closed)
+
+**The test found a real leak, and it reversed a documented decision.**
+
+`subject_identifiers.value` was deliberately left unencrypted in 001-04,
+reasoned as: an MRN is an identifier rather than clinical content, it
+must be indexed for resolution, and the uniqueness constraint that makes
+identity resolution idempotent has to operate on it.
+
+That reasoning was wrong on the facts. **Deterministic encryption
+produces stable ciphertext, so equality lookup and the unique index both
+keep working** — it is exactly the trade already accepted for
+`contact_email`. And what the reasoning missed is that ActiveRecord logs
+SQL: an unencrypted MRN appears in plaintext in every INSERT and SELECT
+touching the table. HO §93's list of what technical logs may contain
+does not include external identifiers, and an MRN is a direct handle on
+a person.
+
+Now `encrypts :value, deterministic: true`. Verified: ciphertext at
+rest, plaintext through the model, identity resolution and its
+idempotency specs unchanged, demo seed still produces exactly the two
+expected Cases.
+
+This is the clearest case yet for why "the architecture supports it" is
+not the same as a test. Every structural precaution was already in place
+— jobs take ids, `technical_label` exists, audit is a separate table —
+and the leak was somewhere none of them looked.
+
+**What the spec actually does:** drives a real ingest → normalize →
+dispatch cycle with deliberately unusual PHI values, captures the Rails
+log at DEBUG, and greps it. It also asserts the log is *not empty*, so
+the other assertions cannot pass vacuously by the pipeline logging
+nothing. Error paths are covered too, since an exception message is the
+classic leak — it is built from whatever was in scope and travels to
+aggregators.
+
+Note for whoever runs this next: development data seeded before this
+change holds plaintext MRNs and will not decrypt
+(`support_unencrypted_data = false`). Re-run `bin/demo_seed` after
+clearing.
+
 ### 2026-08-09 — 002-16, 002-18 to 002-20 case lifecycle
 
 **Priority deliberately cannot see evidence.** S2C-011 says priority is

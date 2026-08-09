@@ -177,8 +177,8 @@ Review, multiple monitors, FHIR, CSV import, RLS implementation
 - [x] Idempotency specs: envelope, normalization, derived signal,
       Signal, CaseSignal
 - [x] Concurrency correlation spec passes reliably (runs 20x in CI loop)
-- [ ] No PHI in logs spec (log scrubbing smoke test) — **not done**, see
-      Decision Log
+- [x] No PHI in logs spec (log scrubbing smoke test) — closed in epic
+      002; it found a real leak (unencrypted MRN in SQL logs)
 - [x] Definition of Done system spec passes
 
 ## Decision Log
