@@ -80,9 +80,9 @@ Epic 003); S2C-004→017, S2C-023, S2C-025.
       periodic evaluation job lands with 002-21's queue work
 - [x] 002-20 Dispositions with §46 code list; resolution requires one
       (S2C-015)
-- [ ] 002-21 Ops Queue v1: tabs/counts, filters, sort (priority → age →
+- [x] 002-21 Ops Queue v1: tabs/counts, filters, sort (priority → age →
       detected_at), assignment, pagination, Turbo row refresh (§85–87)
-- [ ] 002-22 Quick Review shell: why-is-this-here, trigger Signals,
+- [x] 002-22 Quick Review shell: why-is-this-here, trigger Signals,
       timeline, owner, actions, disposition controls (§88)
 - [x] 002-23 Case timeline query object merging observations/events/
       signals/case_events (§90)
@@ -109,6 +109,55 @@ land), bulk clinical actions.
       under concurrency, no hidden source changes
 
 ## Decision Log
+
+### 2026-08-09 — 002-21/22 Ops Queue v1 and Quick Review
+
+Built by a sub-agent against the existing patterns; verified here. 73
+ops examples, 505 in the suite.
+
+**A real authorization gap, flagged rather than silently widened.** The
+v0 queue authorized on `OrganizationPolicy#show?` — any active
+membership, including `support_limited`. But the queue IS health data: a
+Case names a subject, says why the system thinks something changed, and
+links to the readings behind it. HO §11 defines `support_limited`
+precisely so support can exist without clinical visibility, and
+`CLINICAL_ROLES` already excluded it. Admitting it to the queue would
+have made that distinction decorative.
+
+Closed with a `CasePolicy` whose `show?` delegates to
+`membership.clinical_access?` — one definition of clinical access rather
+than two that can drift, asserted by a spec that walks every role and
+compares the two answers. Until 005-15 builds a genuinely provider-safe
+support surface, support staff do not read the queue.
+
+**Action controls are generated FROM `Cases::Transition::ALLOWED`**, so
+the UI cannot offer a transition the service will refuse. A hand-written
+button list is a second source of truth that drifts silently.
+
+**Analytical columns render as `—`, not hidden.** Top Finding, evidence
+strength, data quality and baseline maturity have no producers until
+epics 003/004. An empty analytical column is information — hiding it
+would make the queue look complete when it is not.
+
+**Sort options carry a human explanation each**, and a spec asserts no
+ORDER BY references `evidence_level` or any `score`/`weight`/`rank`
+token (S2C-011, S2C-023). Evidence strength is *displayed* per HO §84
+but never sorted or coloured by.
+
+**`id ASC` as final sort tiebreak.** Without a unique tiebreak, offset
+pagination silently duplicates and skips rows — a queue that loses work
+between pages is worse than one that is slow.
+
+Deviation: `app/services/cases/assign.rb` was added outside the
+directories the sub-agent was given. Justified — assignment mutates a
+Case and controllers may not, `Cases::Transition` is a status legality
+table and assignment is not a status, and `RouteCase` is automatic and
+team-only. It refuses assignment on resolved or dismissed Cases, since
+reassigning closed work reads like reopening, which only a new
+compatible Signal may do (S2C-016).
+
+Still open: 002-19's periodic watch-evaluation job (Quick Review can
+start a watch; nothing yet fires it) and 002-25's concurrency specs.
 
 ### 2026-08-09 — 002-12..15, 002-17, 002-23, 002-24
 

@@ -1,12 +1,69 @@
-<%# HO §84: "work reason should be visually primary; subject identity should
-    be secondary." The queue answers "what needs doing", not "who is sick". %>
+<%# The Ops Queue (HO §84–87).
+
+    "The queue is a Case list, not an alert list." Work reason is visually
+    primary; subject identity is secondary and opaque.
+
+    S2C-023: the sort is stated in words on the page. An operator who
+    disagrees with the order can read why it is that order — which is the
+    whole difference between a queue and a black box. %>
 <h1>Ops Queue — <%= Current.organization.name %></h1>
 
-<p>
-  <% Cases::CaseRecord::ACTIVE_STATUSES.each do |status| %>
-    <span><%= status.humanize %>: <strong><%= @counts.fetch(status, 0) %></strong></span>
+<%= render "ops/cases/flash" %>
+
+<% filters = request.query_parameters.except("page") %>
+
+<%# Status tabs with counts (HO §87). Counts respect every filter except
+    status, so switching tabs keeps the filter set and the numbers describe
+    what you would actually see. %>
+<nav>
+  <% active_total = @counts.slice(*Cases::CaseRecord::ACTIVE_STATUSES).values.sum %>
+  <%= link_to "Active (#{active_total})",
+              ops_cases_path(filters.merge("status" => Ops::CasesController::ACTIVE_TAB)) %>
+  <% Cases::CaseRecord::STATUSES.each do |status| %>
+    |
+    <%= link_to "#{status.humanize} (#{@counts.fetch(status, 0)})",
+                ops_cases_path(filters.merge("status" => status)) %>
   <% end %>
-</p>
+  |
+  <%= link_to "All (#{@counts.values.sum})",
+              ops_cases_path(filters.merge("status" => Ops::CasesController::ALL_TAB)) %>
+</nav>
+
+<p>Showing tab: <strong><%= @tab.humanize %></strong></p>
+
+<%= form_with url: ops_cases_path, method: :get do %>
+  <%= hidden_field_tag :status, @tab %>
+
+  <label>Priority
+    <%= select_tag :priority,
+                   options_for_select(Ops::CaseQuery::PRIORITY_ORDER, params[:priority]),
+                   include_blank: "any" %>
+  </label>
+
+  <label>Team
+    <%= select_tag :team,
+                   options_from_collection_for_select(assignment_options.teams, :id, :name, params[:team]) +
+                     options_for_select([ [ "unassigned", Ops::CaseQuery::UNASSIGNED ] ], params[:team]),
+                   include_blank: "any" %>
+  </label>
+
+  <label>Owner
+    <%= select_tag :owner,
+                   options_from_collection_for_select(assignment_options.owners, :id, :email_address, params[:owner]) +
+                     options_for_select([ [ "unassigned", Ops::CaseQuery::UNASSIGNED ], [ "me", "me" ] ], params[:owner]),
+                   include_blank: "any" %>
+  </label>
+
+  <label>Sort
+    <%= select_tag :sort,
+                   options_for_select(Ops::CaseQuery::SORTS.map { |key, s| [ s[:label], key ] }, @query.sort) %>
+  </label>
+
+  <%= submit_tag "Apply filters" %>
+  <%= link_to "Clear", ops_cases_path %>
+<% end %>
+
+<p><small>Order: <%= @query.sort_explanation %></small></p>
 
 <% if @cases.empty? %>
   <p>Nothing in the queue.</p>
@@ -16,31 +73,33 @@
       <tr>
         <th>Work reason</th>
         <th>Subject</th>
-        <th>Priority</th>
+        <th>Program</th>
+        <th>Review priority</th>
         <th>Status</th>
         <th>Age</th>
-        <th>Owner</th>
+        <th>Owner / team</th>
+        <th>Evidence strength</th>
+        <th>Data quality</th>
+        <th>Baseline maturity</th>
         <th>Analysis</th>
+        <th>Actions</th>
       </tr>
     </thead>
     <tbody>
-      <% @cases.each do |case_record| %>
-        <tr>
-          <%# Primary: why this Case exists. %>
-          <td><strong><%= case_record.title %></strong></td>
-          <%# Secondary: an opaque handle, never a name. Identity is PHI and
-              requires a deliberate, audited read (HO §92). %>
-          <td><%= case_record.subject.public_id %></td>
-          <td><%= case_record.review_priority %></td>
-          <td><%= case_record.status.humanize %></td>
-          <td><%= time_ago_in_words(case_record.detected_at) %></td>
-          <td><%= case_record.owner&.email_address || "—" %></td>
-          <%# S2C-019: analysis state is shown but never hides the Case.
-              `failed` and `insufficient_evidence` are distinct and both
-              remain visible and actionable. %>
-          <td><%= case_record.analysis_status.humanize %></td>
-        </tr>
-      <% end %>
+      <%= render partial: "ops/cases/case_row", collection: @cases, as: :case_record %>
     </tbody>
   </table>
+
+  <%# Pagination. Offset paging is honest about what it is; HO §86 says to
+      query the normalized tables directly until measurement says otherwise,
+      and not to preemptively build a read model. %>
+  <nav>
+    <% if @query.page > 1 %>
+      <%= link_to "← Previous", ops_cases_path(filters.merge("page" => @query.page - 1)) %>
+    <% end %>
+    Page <%= @query.page %> of <%= @query.page_count %> (<%= @query.total_count %> Cases)
+    <% if @query.page < @query.page_count %>
+      <%= link_to "Next →", ops_cases_path(filters.merge("page" => @query.page + 1)) %>
+    <% end %>
+  </nav>
 <% end %>

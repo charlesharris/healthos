@@ -1,0 +1,208 @@
+<%# Quick Review (HO §88).
+
+    "Most Cases should be resolvable without opening the full Workbench." So
+    this page answers, in order: why is this here, what is the evidence, what
+    happened, who owns it, what can I do about it.
+
+    Work reason is the heading. Subject identity appears once, as an opaque
+    handle — never a name, never an MRN (HO §84, §92). %>
+<p><%= link_to "← Ops Queue", ops_cases_path %></p>
+
+<%= render "ops/cases/flash" %>
+
+<h1><%= @case_record.title.presence || @case_record.case_type.humanize %></h1>
+
+<dl>
+  <dt>Subject</dt><dd><%= @case_record.subject.public_id %></dd>
+  <dt>Program</dt><dd><%= @case_record.domain_key %></dd>
+  <dt>Case type</dt><dd><%= @case_record.case_type.humanize %></dd>
+  <dt>Case</dt><dd><%= @case_record.public_id %></dd>
+  <dt>Status</dt><dd><%= @case_record.status.humanize %></dd>
+
+  <%# S2C-011: review priority is operational policy — how soon a human should
+      look — and is independent of how strong the statistical evidence is. The
+      reasons are shown because no Case may carry an unexplained ranking
+      (S2C-012). %>
+  <dt>Review priority</dt>
+  <dd>
+    <%= @case_record.review_priority %>
+    <ul>
+      <% @case_record.priority_reasons.each do |reason| %>
+        <li><strong><%= reason["code"] %></strong> — <%= reason["explanation"] %></li>
+      <% end %>
+    </ul>
+  </dd>
+
+  <dt>Owner</dt><dd><%= @case_record.owner&.email_address || "unassigned" %></dd>
+  <dt>Team</dt><dd><%= @case_record.team&.name || "no team" %></dd>
+  <dt>Detected</dt><dd><%= @case_record.detected_at %> (<%= time_ago_in_words(@case_record.detected_at) %> ago)</dd>
+  <dt>Last reviewed</dt><dd><%= @case_record.last_reviewed_at || "never" %></dd>
+
+  <%# S2C-019: analysis state is displayed and never hides the Case. `failed`
+      means the analysis broke and someone should look; `insufficient_evidence`
+      means the analysis ran and honestly reported that the data does not
+      support a conclusion (STAT-036) — a successful outcome. Conflating them
+      would turn an honest answer into an incident, and an incident into an
+      honest answer. %>
+  <dt>Analysis</dt>
+  <dd>
+    <%= @case_record.analysis_status.humanize %>
+    <% if @case_record.analysis_status == "failed" %>
+      <small>Analysis did not complete. The Case is unaffected and still needs handling.</small>
+    <% elsif @case_record.analysis_status == "insufficient_evidence" %>
+      <small>Analysis completed and found no reliable distinguishing pattern.
+        That is a result, not a failure.</small>
+    <% end %>
+    <% if @case_record.analysis_as_of %>
+      <small>as of <%= @case_record.analysis_as_of %></small>
+    <% end %>
+  </dd>
+
+  <dt>Evidence strength</dt><dd><%= @case_record.evidence_level || "—" %></dd>
+  <dt>Data quality</dt><dd><%= @case_record.data_quality_state || "—" %></dd>
+  <dt>Baseline maturity</dt><dd><%= @case_record.baseline_maturity || "—" %></dd>
+</dl>
+
+<h2>Why is this here?</h2>
+
+<%# The trigger Signals and their attributes, not a restatement of the title.
+    A Signal is immutable machine evidence (S2C-001); this is the machine's
+    actual claim, with the monitor and version that made it, so a reader can
+    judge it rather than take it on faith. %>
+<% if @trigger_attachments.empty? %>
+  <p>No trigger Signal is attached to this Case.</p>
+<% else %>
+  <% @trigger_attachments.each do |attachment| %>
+    <% signal = attachment.signal %>
+    <h3><%= signal.signal_type.humanize %></h3>
+    <ul>
+      <li>Monitor: <%= signal.monitor %> (digest <%= signal.monitor_digest.first(12) %>)</li>
+      <li>Detected: <%= signal.detected_at %></li>
+      <li>Window: <%= signal.window_started_at %> → <%= signal.window_ended_at || "open" %></li>
+      <li>Severity: <%= signal.severity %></li>
+      <% signal.attributes_json.each do |key, value| %>
+        <li><%= key.humanize %>: <%= value.is_a?(Hash) || value.is_a?(Array) ? value.to_json : value %></li>
+      <% end %>
+    </ul>
+  <% end %>
+<% end %>
+
+<% if @other_attachments.any? %>
+  <h3>Also attached</h3>
+  <ul>
+    <% @other_attachments.each do |attachment| %>
+      <li>
+        <strong><%= attachment.relationship %></strong>:
+        <%= attachment.signal.signal_type.humanize %>
+        (<%= attachment.signal.monitor %>, <%= attachment.signal.detected_at %>)
+        <%# §158: why correlation attached this Signal to this Case. %>
+        <% if attachment.explanation.present? %>
+          <br><small><%= attachment.explanation["explanation"] || attachment.explanation.to_json %></small>
+        <% end %>
+      </li>
+    <% end %>
+  </ul>
+<% end %>
+
+<h2>Timeline</h2>
+
+<%# HO §90: observations, signals, case events, dispositions and workflow
+    actions on one axis, newest last. Read-only over append-only sources. %>
+<table>
+  <thead><tr><th>When</th><th>What</th><th>Entry</th><th>Detail</th></tr></thead>
+  <tbody>
+    <% @timeline.each do |entry| %>
+      <tr>
+        <td><%= entry.at %></td>
+        <td><%= entry.kind.humanize %></td>
+        <td><%= entry.summary %></td>
+        <td><small><%= entry.detail.is_a?(Hash) ? entry.detail.compact.to_json : entry.detail %></small></td>
+      </tr>
+    <% end %>
+  </tbody>
+</table>
+
+<h2>Actions</h2>
+
+<% if @case_record.resolved? %>
+  <p>
+    This Case is <%= @case_record.status %>. Reopening is not a manual action —
+    only a new compatible Signal reopens a Case (S2C-016), and the history above
+    is retained when it does.
+  </p>
+  <% if (disposition = @case_record.latest_disposition) %>
+    <p>Disposition: <strong><%= disposition.code.humanize %></strong>
+      <%= "— #{disposition.notes}" if disposition.notes.present? %></p>
+  <% end %>
+<% else %>
+  <h3>Assignment</h3>
+  <%= form_with url: ops_case_assignment_path(@case_record), method: :patch do %>
+    <label>Owner
+      <%= select_tag "assignment[owner_id]",
+                     options_from_collection_for_select(assignment_options.owners, :id, :email_address,
+                                                        @case_record.owner_id),
+                     include_blank: "unassigned" %>
+    </label>
+    <label>Team
+      <%= select_tag "assignment[team_id]",
+                     options_from_collection_for_select(assignment_options.teams, :id, :name,
+                                                        @case_record.team_id),
+                     include_blank: "no team" %>
+    </label>
+    <%= submit_tag "Update assignment" %>
+  <% end %>
+
+  <%# The buttons offered are exactly the moves Cases::Transition's legality
+      table permits from here — the UI reads that table rather than keeping a
+      second copy of the rules that could drift from it (S2C-013). %>
+  <% allowed = Cases::Transition::ALLOWED.fetch(@case_record.status) %>
+
+  <h3>Move this Case</h3>
+  <% (allowed - Cases::Transition::CLOSING_STATES - [ "watching" ]).each do |state| %>
+    <%= form_with url: ops_case_state_path(@case_record), method: :patch do %>
+      <%= hidden_field_tag "state[to]", state %>
+      <%= submit_tag({ "triaged" => "Triage", "investigating" => "Start investigating",
+                       "waiting_external" => "Waiting on external action" }.fetch(state, state.humanize)) %>
+    <% end %>
+  <% end %>
+
+  <% if allowed.include?("watching") %>
+    <%# HO §45: watching means review happened and the evidence does not
+        justify closure or action yet. It requires a stated condition for
+        coming back — a watch with no condition is a Case quietly abandoned. %>
+    <%= form_with url: ops_case_state_path(@case_record), method: :patch do %>
+      <%= hidden_field_tag "state[to]", "watching" %>
+      <label>Start watching until
+        <%= select_tag "state[watch_condition_type]",
+                       options_for_select(Cases::WatchCondition::CONDITION_TYPES, "time_elapsed"),
+                       required: true %>
+      </label>
+      <label>Days <%= number_field_tag "state[watch_days]", 7, min: 1 %></label>
+      <label>Observations <%= number_field_tag "state[watch_count]", nil, min: 1 %></label>
+      <%= submit_tag "Start watching" %>
+    <% end %>
+  <% end %>
+
+  <%# S2C-015: resolving or dismissing REQUIRES a disposition. The select is
+      `required` with no preselected value, so the browser refuses the submit;
+      Cases::Transition refuses it again server-side, because a client-side
+      requirement is a courtesy and not a control. %>
+  <% Cases::Transition::CLOSING_STATES.each do |state| %>
+    <% next unless allowed.include?(state) %>
+
+    <h3><%= state.humanize %></h3>
+    <%= form_with url: ops_case_state_path(@case_record), method: :patch do %>
+      <%= hidden_field_tag "state[to]", state %>
+      <label>Disposition (required)
+        <%= select_tag "state[disposition_code]",
+                       options_for_select(Cases::Disposition::CODES.map { |c| [ c.humanize, c ] }),
+                       include_blank: "choose a disposition", required: true %>
+      </label>
+      <label>Notes <%= text_field_tag "state[disposition_notes]" %></label>
+      <%= submit_tag "#{state.humanize} Case" %>
+    <% end %>
+  <% end %>
+<% end %>
+
+<p><small>Full investigation workbench arrives with Epic 004; Quick Review is
+  the surface for now (HO §88).</small></p>

@@ -27,9 +27,19 @@ Rails.application.routes.draw do
   get  "no-access",             to: "organizations#no_access", as: :no_access
   get  "members",               to: "organizations#members", as: :members
 
-  # The Ops Queue — the daily product surface (HO §84).
+  # The Ops Queue — the daily product surface (HO §84), with Quick Review
+  # (HO §88) as the Case member route.
+  #
+  # Assignment and state are separate singular resources rather than member
+  # verbs on cases. Each maps to a controller that does exactly one thing and
+  # delegates to a service (Cases::Assign, Cases::Transition), which is what
+  # keeps S2C-013 mechanically true: there is no update action on the Case
+  # itself to reach.
   namespace :ops do
-    resources :cases, only: %i[index]
+    resources :cases, only: %i[index show] do
+      resource :assignment, only: %i[update], controller: "assignments"
+      resource :state, only: %i[update], controller: "case_states"
+    end
   end
 
   resources :invitations, only: %i[index create]

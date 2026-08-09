@@ -1,0 +1,86 @@
+<%# One queue row (HO §84).
+
+    Column order is the requirement, not decoration: work reason first and
+    linked, subject identity second and opaque. The queue answers "what needs
+    doing", not "who is sick". %>
+<tr id="<%= dom_id(case_record, :row) %>">
+  <%# Primary: why this Case exists. %>
+  <td>
+    <strong><%= link_to case_record.title.presence || case_record.case_type.humanize,
+                        ops_case_path(case_record) %></strong>
+    <br>
+    <small><%= case_record.case_type.humanize %></small>
+  </td>
+
+  <%# Secondary: an opaque handle, never a name or an MRN. Identity is PHI and
+      requires a deliberate, audited read (HO §92). %>
+  <td><small><%= case_record.subject.public_id %></small></td>
+
+  <td><%= case_record.domain_key %></td>
+
+  <%# Operational policy, not evidence (S2C-011). Rendered as a word, never a
+      number, and never used to colour or rank by evidence strength. %>
+  <td>
+    <%= case_record.review_priority %>
+    <% if case_record.priority_reasons.present? %>
+      <br><small><%= case_record.priority_reasons.filter_map { |r| r["code"] }.join(", ") %></small>
+    <% end %>
+  </td>
+
+  <td><%= case_record.status.humanize %></td>
+
+  <%# Age is time since anyone looked, falling back to detection — the same
+      thing the default sort orders by, so the column explains the order. %>
+  <td>
+    <%= time_ago_in_words(case_record.last_reviewed_at || case_record.detected_at) %>
+    <br><small>detected <%= time_ago_in_words(case_record.detected_at) %> ago</small>
+  </td>
+
+  <td>
+    <%= case_record.owner&.email_address || "unassigned" %>
+    <br><small><%= case_record.team&.name || "no team" %></small>
+  </td>
+
+  <%# HO §84 columns that Epic 003/004 will populate. Shown as "—" rather than
+      hidden: an empty analytical column is information (nothing has been
+      computed yet), and hiding it would make the queue look more analysed
+      than it is. Evidence strength is displayed but never sorted or coloured
+      by (S2C-011). %>
+  <td><%= case_record.evidence_level || "—" %></td>
+  <td><%= case_record.data_quality_state || "—" %></td>
+  <td><%= case_record.baseline_maturity || "—" %></td>
+
+  <%# S2C-019: analysis state is shown but never hides the Case. `failed` and
+      `insufficient_evidence` are distinct states and both stay actionable. %>
+  <td>
+    <%= case_record.analysis_status.humanize %>
+    <% if case_record.analysis_as_of %>
+      <br><small>as of <%= time_ago_in_words(case_record.analysis_as_of) %> ago</small>
+    <% end %>
+  </td>
+
+  <td>
+    <% if case_record.active? %>
+      <%# Assignment and triage inline, so the common moves do not need a page
+          load. The response is a Turbo stream replacing this row (HO §87). %>
+      <%= form_with url: ops_case_assignment_path(case_record), method: :patch do %>
+        <%= hidden_field_tag :row, "1" %>
+        <%= select_tag "assignment[owner_id]",
+                       options_from_collection_for_select(assignment_options.owners, :id, :email_address,
+                                                          case_record.owner_id),
+                       include_blank: "unassigned" %>
+        <%= submit_tag "Assign" %>
+      <% end %>
+
+      <% if case_record.status == "new" %>
+        <%= form_with url: ops_case_state_path(case_record), method: :patch do %>
+          <%= hidden_field_tag :row, "1" %>
+          <%= hidden_field_tag "state[to]", "triaged" %>
+          <%= submit_tag "Triage" %>
+        <% end %>
+      <% end %>
+    <% else %>
+      <small>closed <%= case_record.resolved_at ? "#{time_ago_in_words(case_record.resolved_at)} ago" : "" %></small>
+    <% end %>
+  </td>
+</tr>
