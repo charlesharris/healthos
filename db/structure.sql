@@ -47,6 +47,28 @@ CREATE TABLE public.audit_events (
 
 
 --
+-- Name: devices; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.devices (
+    id uuid DEFAULT uuidv7() NOT NULL,
+    organization_id uuid NOT NULL,
+    subject_id uuid,
+    source_id uuid NOT NULL,
+    external_id text NOT NULL,
+    manufacturer text,
+    model text,
+    device_type text,
+    firmware_version text,
+    active_from timestamp(6) without time zone NOT NULL,
+    active_to timestamp(6) without time zone,
+    metadata jsonb DEFAULT '{}'::jsonb NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL
+);
+
+
+--
 -- Name: domain_events; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -67,6 +89,55 @@ CREATE TABLE public.domain_events (
 
 
 --
+-- Name: events; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.events (
+    id uuid DEFAULT uuidv7() NOT NULL,
+    public_id text NOT NULL,
+    organization_id uuid NOT NULL,
+    subject_id uuid NOT NULL,
+    semantic_key text NOT NULL,
+    semantic_version integer NOT NULL,
+    occurred_at timestamp(6) without time zone NOT NULL,
+    ended_at timestamp(6) without time zone,
+    source_id uuid NOT NULL,
+    device_id uuid,
+    raw_envelope_id uuid NOT NULL,
+    recording_method text DEFAULT 'unknown'::text NOT NULL,
+    attributes_json jsonb DEFAULT '{}'::jsonb NOT NULL,
+    normalizer_key text NOT NULL,
+    normalizer_version integer NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL
+);
+
+
+--
+-- Name: intervals; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.intervals (
+    id uuid DEFAULT uuidv7() NOT NULL,
+    public_id text NOT NULL,
+    organization_id uuid NOT NULL,
+    subject_id uuid NOT NULL,
+    semantic_key text NOT NULL,
+    semantic_version integer NOT NULL,
+    started_at timestamp(6) without time zone NOT NULL,
+    ended_at timestamp(6) without time zone,
+    source_id uuid NOT NULL,
+    raw_envelope_id uuid NOT NULL,
+    attributes_json jsonb DEFAULT '{}'::jsonb NOT NULL,
+    normalizer_key text NOT NULL,
+    normalizer_version integer NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT intervals_end_after_start_check CHECK (((ended_at IS NULL) OR (ended_at >= started_at)))
+);
+
+
+--
 -- Name: invitations; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -83,6 +154,65 @@ CREATE TABLE public.invitations (
     created_at timestamp(6) without time zone NOT NULL,
     updated_at timestamp(6) without time zone NOT NULL,
     CONSTRAINT invitations_role_check CHECK ((role = ANY (ARRAY['organization_admin'::text, 'clinical_ops'::text, 'clinician'::text, 'analyst'::text, 'support_limited'::text])))
+);
+
+
+--
+-- Name: observation_groups; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.observation_groups (
+    id uuid DEFAULT uuidv7() NOT NULL,
+    organization_id uuid NOT NULL,
+    subject_id uuid NOT NULL,
+    semantic_key text NOT NULL,
+    semantic_version integer NOT NULL,
+    observed_at timestamp(6) without time zone NOT NULL,
+    source_id uuid NOT NULL,
+    raw_envelope_id uuid NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL
+);
+
+
+--
+-- Name: observations; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.observations (
+    id uuid DEFAULT uuidv7() NOT NULL,
+    public_id text NOT NULL,
+    organization_id uuid NOT NULL,
+    subject_id uuid NOT NULL,
+    semantic_key text NOT NULL,
+    semantic_version integer NOT NULL,
+    observation_group_id uuid,
+    value_numeric numeric,
+    value_text text,
+    value_code text,
+    unit text,
+    observed_at timestamp(6) without time zone NOT NULL,
+    observed_end_at timestamp(6) without time zone,
+    timezone_offset_minutes integer,
+    source_id uuid NOT NULL,
+    device_id uuid,
+    raw_envelope_id uuid NOT NULL,
+    source_record_id text NOT NULL,
+    recording_method text DEFAULT 'unknown'::text NOT NULL,
+    measurement_protocol text,
+    quality_state text DEFAULT 'observed'::text NOT NULL,
+    quality_flags jsonb DEFAULT '{}'::jsonb NOT NULL,
+    source_modified_at timestamp(6) without time zone,
+    ingested_at timestamp(6) without time zone,
+    normalized_at timestamp(6) without time zone NOT NULL,
+    normalizer_key text NOT NULL,
+    normalizer_version integer NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT observations_numeric_requires_unit_check CHECK (((value_numeric IS NULL) OR (unit IS NOT NULL))),
+    CONSTRAINT observations_quality_state_check CHECK ((quality_state = ANY (ARRAY['observed'::text, 'not_expected'::text, 'expected_but_missing'::text, 'source_unavailable'::text, 'device_not_reporting'::text, 'manual_entry_absent'::text, 'invalid_measurement'::text, 'excluded_by_rule'::text, 'late_not_yet_arrived'::text, 'unknown'::text]))),
+    CONSTRAINT observations_recording_method_check CHECK ((recording_method = ANY (ARRAY['device_automatic'::text, 'device_manual_transcription'::text, 'manual_entry'::text, 'clinician_entered'::text, 'imported_batch'::text, 'unknown'::text]))),
+    CONSTRAINT observations_value_representation_check CHECK ((((quality_state = 'observed'::text) AND (((((value_numeric IS NOT NULL))::integer + ((value_text IS NOT NULL))::integer) + ((value_code IS NOT NULL))::integer) = 1)) OR ((quality_state <> 'observed'::text) AND (value_numeric IS NULL) AND (value_text IS NULL) AND (value_code IS NULL))))
 );
 
 
@@ -323,6 +453,14 @@ ALTER TABLE ONLY public.audit_events
 
 
 --
+-- Name: devices devices_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.devices
+    ADD CONSTRAINT devices_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: domain_events domain_events_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -331,11 +469,43 @@ ALTER TABLE ONLY public.domain_events
 
 
 --
+-- Name: events events_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.events
+    ADD CONSTRAINT events_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: intervals intervals_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.intervals
+    ADD CONSTRAINT intervals_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: invitations invitations_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.invitations
     ADD CONSTRAINT invitations_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: observation_groups observation_groups_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.observation_groups
+    ADD CONSTRAINT observation_groups_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: observations observations_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.observations
+    ADD CONSTRAINT observations_pkey PRIMARY KEY (id);
 
 
 --
@@ -485,6 +655,41 @@ CREATE INDEX index_audit_events_on_type_and_time ON public.audit_events USING bt
 
 
 --
+-- Name: index_devices_identity; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_devices_identity ON public.devices USING btree (organization_id, source_id, external_id);
+
+
+--
+-- Name: index_devices_on_org_subject_active_from; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_devices_on_org_subject_active_from ON public.devices USING btree (organization_id, subject_id, active_from);
+
+
+--
+-- Name: index_devices_on_organization_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_devices_on_organization_id ON public.devices USING btree (organization_id);
+
+
+--
+-- Name: index_devices_on_source_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_devices_on_source_id ON public.devices USING btree (source_id);
+
+
+--
+-- Name: index_devices_on_subject_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_devices_on_subject_id ON public.devices USING btree (subject_id);
+
+
+--
 -- Name: index_domain_events_on_aggregate; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -510,6 +715,97 @@ CREATE INDEX index_domain_events_on_organization_id ON public.domain_events USIN
 --
 
 CREATE INDEX index_domain_events_pending ON public.domain_events USING btree (occurred_at, id) WHERE (dispatched_at IS NULL);
+
+
+--
+-- Name: index_events_on_device_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_events_on_device_id ON public.events USING btree (device_id);
+
+
+--
+-- Name: index_events_on_org_subject_key_time; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_events_on_org_subject_key_time ON public.events USING btree (organization_id, subject_id, semantic_key, occurred_at DESC);
+
+
+--
+-- Name: index_events_on_organization_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_events_on_organization_id ON public.events USING btree (organization_id);
+
+
+--
+-- Name: index_events_on_organization_id_and_public_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_events_on_organization_id_and_public_id ON public.events USING btree (organization_id, public_id);
+
+
+--
+-- Name: index_events_on_raw_envelope_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_events_on_raw_envelope_id ON public.events USING btree (raw_envelope_id);
+
+
+--
+-- Name: index_events_on_source_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_events_on_source_id ON public.events USING btree (source_id);
+
+
+--
+-- Name: index_events_on_subject_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_events_on_subject_id ON public.events USING btree (subject_id);
+
+
+--
+-- Name: index_intervals_on_org_subject_key_time; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_intervals_on_org_subject_key_time ON public.intervals USING btree (organization_id, subject_id, semantic_key, started_at DESC);
+
+
+--
+-- Name: index_intervals_on_organization_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_intervals_on_organization_id ON public.intervals USING btree (organization_id);
+
+
+--
+-- Name: index_intervals_on_organization_id_and_public_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_intervals_on_organization_id_and_public_id ON public.intervals USING btree (organization_id, public_id);
+
+
+--
+-- Name: index_intervals_on_raw_envelope_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_intervals_on_raw_envelope_id ON public.intervals USING btree (raw_envelope_id);
+
+
+--
+-- Name: index_intervals_on_source_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_intervals_on_source_id ON public.intervals USING btree (source_id);
+
+
+--
+-- Name: index_intervals_on_subject_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_intervals_on_subject_id ON public.intervals USING btree (subject_id);
 
 
 --
@@ -545,6 +841,111 @@ CREATE INDEX index_invitations_on_organization_id ON public.invitations USING bt
 --
 
 CREATE UNIQUE INDEX index_invitations_on_token_digest ON public.invitations USING btree (token_digest);
+
+
+--
+-- Name: index_observation_groups_on_org_subject_time; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_observation_groups_on_org_subject_time ON public.observation_groups USING btree (organization_id, subject_id, observed_at);
+
+
+--
+-- Name: index_observation_groups_on_organization_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_observation_groups_on_organization_id ON public.observation_groups USING btree (organization_id);
+
+
+--
+-- Name: index_observation_groups_on_raw_envelope_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_observation_groups_on_raw_envelope_id ON public.observation_groups USING btree (raw_envelope_id);
+
+
+--
+-- Name: index_observation_groups_on_source_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_observation_groups_on_source_id ON public.observation_groups USING btree (source_id);
+
+
+--
+-- Name: index_observation_groups_on_subject_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_observation_groups_on_subject_id ON public.observation_groups USING btree (subject_id);
+
+
+--
+-- Name: index_observations_normalization_identity; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_observations_normalization_identity ON public.observations USING btree (raw_envelope_id, semantic_key, semantic_version, normalizer_version, observed_at);
+
+
+--
+-- Name: index_observations_on_device_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_observations_on_device_id ON public.observations USING btree (device_id);
+
+
+--
+-- Name: index_observations_on_observation_group_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_observations_on_observation_group_id ON public.observations USING btree (observation_group_id);
+
+
+--
+-- Name: index_observations_on_org_source_record; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_observations_on_org_source_record ON public.observations USING btree (organization_id, source_id, source_record_id);
+
+
+--
+-- Name: index_observations_on_org_subject_key_time; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_observations_on_org_subject_key_time ON public.observations USING btree (organization_id, subject_id, semantic_key, observed_at DESC);
+
+
+--
+-- Name: index_observations_on_organization_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_observations_on_organization_id ON public.observations USING btree (organization_id);
+
+
+--
+-- Name: index_observations_on_organization_id_and_public_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_observations_on_organization_id_and_public_id ON public.observations USING btree (organization_id, public_id);
+
+
+--
+-- Name: index_observations_on_raw_envelope_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_observations_on_raw_envelope_id ON public.observations USING btree (raw_envelope_id);
+
+
+--
+-- Name: index_observations_on_source_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_observations_on_source_id ON public.observations USING btree (source_id);
+
+
+--
+-- Name: index_observations_on_subject_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_observations_on_subject_id ON public.observations USING btree (subject_id);
 
 
 --
@@ -809,11 +1210,59 @@ ALTER TABLE ONLY public.raw_envelopes
 
 
 --
+-- Name: observations fk_rails_0dc011e4e5; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.observations
+    ADD CONSTRAINT fk_rails_0dc011e4e5 FOREIGN KEY (source_id) REFERENCES public.sources(id);
+
+
+--
 -- Name: invitations fk_rails_0fe4c14f0e; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.invitations
     ADD CONSTRAINT fk_rails_0fe4c14f0e FOREIGN KEY (organization_id) REFERENCES public.organizations(id);
+
+
+--
+-- Name: events fk_rails_163b5130b5; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.events
+    ADD CONSTRAINT fk_rails_163b5130b5 FOREIGN KEY (organization_id) REFERENCES public.organizations(id);
+
+
+--
+-- Name: observations fk_rails_1b0021e77f; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.observations
+    ADD CONSTRAINT fk_rails_1b0021e77f FOREIGN KEY (raw_envelope_id) REFERENCES public.raw_envelopes(id);
+
+
+--
+-- Name: events fk_rails_1fda79cf5a; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.events
+    ADD CONSTRAINT fk_rails_1fda79cf5a FOREIGN KEY (raw_envelope_id) REFERENCES public.raw_envelopes(id);
+
+
+--
+-- Name: events fk_rails_201ad5ebff; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.events
+    ADD CONSTRAINT fk_rails_201ad5ebff FOREIGN KEY (source_id) REFERENCES public.sources(id);
+
+
+--
+-- Name: intervals fk_rails_2211a4c606; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.intervals
+    ADD CONSTRAINT fk_rails_2211a4c606 FOREIGN KEY (raw_envelope_id) REFERENCES public.raw_envelopes(id);
 
 
 --
@@ -849,6 +1298,14 @@ ALTER TABLE ONLY public.sources
 
 
 --
+-- Name: observations fk_rails_55688bc20c; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.observations
+    ADD CONSTRAINT fk_rails_55688bc20c FOREIGN KEY (device_id) REFERENCES public.devices(id);
+
+
+--
 -- Name: organization_memberships fk_rails_57cf70d280; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -862,6 +1319,30 @@ ALTER TABLE ONLY public.organization_memberships
 
 ALTER TABLE ONLY public.team_memberships
     ADD CONSTRAINT fk_rails_61c29b529e FOREIGN KEY (team_id) REFERENCES public.teams(id);
+
+
+--
+-- Name: observation_groups fk_rails_62b87b0c82; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.observation_groups
+    ADD CONSTRAINT fk_rails_62b87b0c82 FOREIGN KEY (raw_envelope_id) REFERENCES public.raw_envelopes(id);
+
+
+--
+-- Name: events fk_rails_635245fc67; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.events
+    ADD CONSTRAINT fk_rails_635245fc67 FOREIGN KEY (subject_id) REFERENCES public.subjects(id);
+
+
+--
+-- Name: events fk_rails_6a6456eb31; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.events
+    ADD CONSTRAINT fk_rails_6a6456eb31 FOREIGN KEY (device_id) REFERENCES public.devices(id);
 
 
 --
@@ -929,11 +1410,43 @@ ALTER TABLE ONLY public.domain_events
 
 
 --
+-- Name: devices fk_rails_9957830653; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.devices
+    ADD CONSTRAINT fk_rails_9957830653 FOREIGN KEY (source_id) REFERENCES public.sources(id);
+
+
+--
 -- Name: subjects fk_rails_9bd688ebfe; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.subjects
     ADD CONSTRAINT fk_rails_9bd688ebfe FOREIGN KEY (organization_id) REFERENCES public.organizations(id);
+
+
+--
+-- Name: observation_groups fk_rails_a4d23a4737; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.observation_groups
+    ADD CONSTRAINT fk_rails_a4d23a4737 FOREIGN KEY (subject_id) REFERENCES public.subjects(id);
+
+
+--
+-- Name: intervals fk_rails_b44d37140b; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.intervals
+    ADD CONSTRAINT fk_rails_b44d37140b FOREIGN KEY (subject_id) REFERENCES public.subjects(id);
+
+
+--
+-- Name: observations fk_rails_b5029132a6; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.observations
+    ADD CONSTRAINT fk_rails_b5029132a6 FOREIGN KEY (organization_id) REFERENCES public.organizations(id);
 
 
 --
@@ -953,6 +1466,22 @@ ALTER TABLE ONLY public.audit_events
 
 
 --
+-- Name: observation_groups fk_rails_c7842aa92b; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.observation_groups
+    ADD CONSTRAINT fk_rails_c7842aa92b FOREIGN KEY (organization_id) REFERENCES public.organizations(id);
+
+
+--
+-- Name: observation_groups fk_rails_caaaf09583; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.observation_groups
+    ADD CONSTRAINT fk_rails_caaaf09583 FOREIGN KEY (source_id) REFERENCES public.sources(id);
+
+
+--
 -- Name: invitations fk_rails_d799c974a1; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -969,11 +1498,27 @@ ALTER TABLE ONLY public.audit_events
 
 
 --
+-- Name: devices fk_rails_de2d742c51; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.devices
+    ADD CONSTRAINT fk_rails_de2d742c51 FOREIGN KEY (subject_id) REFERENCES public.subjects(id);
+
+
+--
 -- Name: subject_identities fk_rails_e961cc75df; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.subject_identities
     ADD CONSTRAINT fk_rails_e961cc75df FOREIGN KEY (subject_id) REFERENCES public.subjects(id);
+
+
+--
+-- Name: intervals fk_rails_ee0738fd83; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.intervals
+    ADD CONSTRAINT fk_rails_ee0738fd83 FOREIGN KEY (organization_id) REFERENCES public.organizations(id);
 
 
 --
@@ -985,11 +1530,43 @@ ALTER TABLE ONLY public.teams
 
 
 --
+-- Name: devices fk_rails_f102621b29; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.devices
+    ADD CONSTRAINT fk_rails_f102621b29 FOREIGN KEY (organization_id) REFERENCES public.organizations(id);
+
+
+--
+-- Name: observations fk_rails_f73dd91004; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.observations
+    ADD CONSTRAINT fk_rails_f73dd91004 FOREIGN KEY (observation_group_id) REFERENCES public.observation_groups(id);
+
+
+--
 -- Name: team_memberships fk_rails_f815fd92e5; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.team_memberships
     ADD CONSTRAINT fk_rails_f815fd92e5 FOREIGN KEY (organization_id) REFERENCES public.organizations(id);
+
+
+--
+-- Name: observations fk_rails_f83a97befd; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.observations
+    ADD CONSTRAINT fk_rails_f83a97befd FOREIGN KEY (subject_id) REFERENCES public.subjects(id);
+
+
+--
+-- Name: intervals fk_rails_ffb9e40026; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.intervals
+    ADD CONSTRAINT fk_rails_ffb9e40026 FOREIGN KEY (source_id) REFERENCES public.sources(id);
 
 
 --
@@ -999,6 +1576,10 @@ ALTER TABLE ONLY public.team_memberships
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20260809110300'),
+('20260809110200'),
+('20260809110100'),
+('20260809110000'),
 ('20260809100100'),
 ('20260809100000'),
 ('20260809090200'),

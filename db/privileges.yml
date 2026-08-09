@@ -85,6 +85,9 @@ mutable:
   - sources
   - devices
 
+  # Devices — active_to is set when a device is retired (HO §20).
+  - devices
+
   # Monitoring configuration — per-org enable/disable and parameters, HO §31
   - monitor_configurations
 

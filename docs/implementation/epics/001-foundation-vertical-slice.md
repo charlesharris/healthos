@@ -100,12 +100,12 @@ semantics in Epic 002); provenance invariants 1–3.
 - [x] Spec: changing a definition without version bump fails verify
 
 ### 001-07 Canonical telemetry (BP path only)
-- [ ] `observation_groups`, `observations` per §16–17 including
+- [x] `observation_groups`, `observations` per §16–17 including
       semantic_key/version, quality_state, normalizer_key/version,
       CHECK constraint on value representation
-- [ ] `events`, `intervals`, `devices` tables created (schema only —
+- [x] `events`, `intervals`, `devices` tables created (schema only —
       exercised in Epic 002)
-- [ ] Missingness-taxonomy-ready fields present (STAT-010); full
+- [x] Missingness-taxonomy-ready fields present (STAT-010); full
       expectation model deferred to Epic 002
 
 ### 001-08 Normalizer + provenance
@@ -653,3 +653,50 @@ that cannot be digested should fail at load rather than at first use.
 
 Zeitwerk note: `app/definitions/` is its own autoload root, so
 `Definitions::Registry` had to move to `app/services/definitions/`.
+
+### 2026-08-09 — 001-07 canonical telemetry
+
+**The value-representation CHECK makes STAT-002 structural.** HO §16 asks
+for a constraint "so value representation is internally valid"; the one
+written here does more than that. An `observed` row must carry exactly
+one of numeric/text/code, and a non-observed row must carry none — so
+there is no way to store `expected_but_missing` with a value of 0.
+Zero-imputation becomes impossible at the storage layer rather than
+discouraged in review. Specced explicitly, including the zero case.
+
+**Ten quality states, not a boolean** (HO §28, STAT-010). The
+distinction that earns its keep is `device_not_reporting` versus
+`manual_entry_absent`: one is an instrumentation finding, the other
+behavioural (STAT-003). Also `not_expected` is absent but *not* a gap —
+a lab that is not due today is not missing — so it is in `MISSING_STATES`
+but deliberately not in `EXPECTED_BUT_ABSENT_STATES`, which is what
+feeds the completeness shortfall in SC §14.
+
+**`decimal`, never `float`.** A BP of 142 must not come back as
+141.99999999999997. Binary floating point has no place in clinical
+evidence, and the spec asserts exact round-tripping.
+
+**`timezone_offset_minutes` is stored alongside `observed_at`** because
+the subject's offset at the moment of measurement is not recoverable
+from a UTC timestamp plus a current timezone — DST and relocation both
+break that reconstruction. HO §121 makes timezone boundaries a required
+regression case.
+
+**Normalization idempotency is keyed on
+`(raw_envelope, semantic_key, semantic_version, normalizer_version,
+observed_at)`.** Including the versions is deliberate: re-running the
+*same* normalizer must not duplicate (§96), while reprocessing under a
+*new* version must produce new rows alongside the old ones, which is
+what HO §155 requires. Both directions specced.
+
+`t.references` already creates an index, so the redundant `add_index`
+calls aborted the first migration — caught because the table simply did
+not exist afterwards. Migrations are transactional in PostgreSQL, so it
+rolled back cleanly.
+
+Three spec-construction mistakes worth noting, since each masked the
+assertion: a failed statement aborts the surrounding transaction (so
+UPDATE and DELETE need separate examples), `save!(validate: false)`
+skips the `before_validation` that assigns `public_id`, and a row with a
+value *and* a non-observed state trips the value-representation CHECK
+before the quality-state one.
