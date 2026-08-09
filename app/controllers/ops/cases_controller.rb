@@ -62,7 +62,8 @@ module Ops
       # for rather than rendering an empty chart for a typo.
       @telemetry = detail.telemetry_profile(
         semantic_key: params[:key].presence,
-        selection: TelemetryProfileQuery::Selection.from_params(params)
+        selection: TelemetryProfileQuery::Selection.from_params(params),
+        filters: scope_filters
       )
     end
 

@@ -20,6 +20,16 @@ module Ops
       )
     end
 
+    # Dimension filters from the query string. Permitted against the query's
+    # own whitelist, so an unknown key never reaches a column name.
+    def scope_filters
+      raw = params[:where]
+      return {} unless raw.respond_to?(:permit)
+
+      raw.permit(*TelemetryProfileQuery::FILTERABLE.keys).to_h
+    end
+    helper_method :scope_filters
+
     def assignment_options
       @assignment_options ||= AssignmentOptionsQuery.new(
         organization: Current.organization, membership: Current.membership
@@ -68,7 +78,8 @@ module Ops
                   timeline_truncated: detail.timeline_truncated?,
                   telemetry: detail.telemetry_profile(
                     semantic_key: params[:key].presence,
-                    selection: TelemetryProfileQuery::Selection.from_params(params)
+                    selection: TelemetryProfileQuery::Selection.from_params(params),
+                    filters: scope_filters
                   ) }
       )
     end

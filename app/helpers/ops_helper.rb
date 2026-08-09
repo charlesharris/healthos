@@ -143,6 +143,22 @@ module OpsHelper
     tag.span(safe_join(pairs, tag.span(" · ", class: "sep")), class: "detail")
   end
 
+  # A URL with one dimension filter added or removed, everything else about
+  # the current view preserved.
+  #
+  # Drill-down is the half of the exploration loop the strip was missing: you
+  # notice that manual entry is 47% of a region, and the useful next move is to
+  # scope the whole view to it and look again. Expressed as a link rather than
+  # as client state, for the same reasons the selection is — linkable, audited,
+  # and it survives a reload.
+  def scope_path(base_path, filters, add: nil, remove: nil)
+    next_filters = filters.dup
+    next_filters.merge!(add.stringify_keys) if add
+    next_filters.delete(remove.to_s) if remove
+
+    next_filters.empty? ? base_path.except(:where) : base_path.merge(where: next_filters)
+  end
+
   # Priority reasons carry codes like `aged_unreviewed`. The code is the thing
   # an operator learns to recognise, so it is shown verbatim in a code style
   # rather than humanized into prose that reads like a sentence someone wrote.

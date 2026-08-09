@@ -52,7 +52,7 @@ module Ops
     # own window. Either way the RANGE stays what the monitor looked at, so
     # dragging changes what is selected rather than what is on screen and two
     # selections over the same Case stay comparable.
-    def telemetry_profile(semantic_key: nil, selection: nil)
+    def telemetry_profile(semantic_key: nil, selection: nil, filters: {})
       bounds = signal_bounds
       return nil if bounds.nil?
 
@@ -62,7 +62,8 @@ module Ops
         organization: organization, membership: membership,
         subject: resolve.subject, range: range,
         selection: selection&.clamp_to(range) || bounds[:selection],
-        semantic_key: semantic_key, preferred_keys: domain_pack_key_order
+        semantic_key: semantic_key, preferred_keys: domain_pack_key_order,
+        filters: filters
       )
     end
 

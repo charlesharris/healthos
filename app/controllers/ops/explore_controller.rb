@@ -27,13 +27,19 @@ module Ops
       authorize_queue!
 
       @range = resolve_range
+      @filters = scope_filters
       @telemetry = TelemetryProfileQuery.new(
         organization: Current.organization, membership: Current.membership,
         range: @range,
+        # Drilling all the way down to one subject turns the cohort view into
+        # that subject's view: their readings appear as marks over the program
+        # density they came from, which is the whole point of having drilled.
+        subject: focused_subject,
         selection: TelemetryProfileQuery::Selection.from_params(params)&.clamp_to(@range) ||
                    default_selection,
         semantic_key: params[:key].presence,
-        preferred_keys: Analysis::ContextDefinition.declared_key_order
+        preferred_keys: Analysis::ContextDefinition.declared_key_order,
+        filters: @filters
       )
 
       # HO §92: reading cohort telemetry is provider access to health data,
@@ -53,6 +59,17 @@ module Ops
     end
 
     private
+
+    # Resolved through the tenant scope, never by bare find: a handle from
+    # another organization must not resolve at all (INV-31). Absent rather
+    # than 404 for an unknown handle — a stale drill-down link should show the
+    # cohort, not an error page.
+    def focused_subject
+      handle = @filters["subject"]
+      return nil if handle.blank?
+
+      Subject.find_by(organization_id: Current.organization.id, public_id: handle)
+    end
 
     def resolve_range
       to = parse_date(params[:range_to]) || Date.current + 1

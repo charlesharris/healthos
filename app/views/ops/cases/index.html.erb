@@ -47,16 +47,16 @@
 
   <%# A GET form, so every filtered view is a URL somebody can send to a
       colleague. The Apply button is real and works without JavaScript;
-      queue_controller hides it and submits on change instead. %>
+      autosubmit hides it and submits on change instead. %>
   <%= form_with url: ops_cases_path, method: :get, class: "filterbar",
-                data: { queue_target: "form" } do %>
+                data: { controller: "autosubmit" } do %>
     <%= hidden_field_tag :status, @tab %>
 
     <div class="<%= class_names("filter", "is-set" => params[:priority].present?) %>">
       <%= label_tag :priority, "Priority" %>
       <%= select_tag :priority,
                      options_for_select(Ops::CaseQuery::PRIORITY_ORDER, params[:priority]),
-                     include_blank: "any", data: { action: "change->queue#applyFilters" } %>
+                     include_blank: "any", data: { action: "change->autosubmit#submit" } %>
     </div>
 
     <div class="<%= class_names("filter", "is-set" => params[:team].present?) %>">
@@ -64,7 +64,7 @@
       <%= select_tag :team,
                      options_from_collection_for_select(assignment_options.teams, :id, :name, params[:team]) +
                        options_for_select([ [ "unassigned", Ops::CaseQuery::UNASSIGNED ] ], params[:team]),
-                     include_blank: "any", data: { action: "change->queue#applyFilters" } %>
+                     include_blank: "any", data: { action: "change->autosubmit#submit" } %>
     </div>
 
     <div class="<%= class_names("filter", "is-set" => params[:owner].present?) %>">
@@ -72,7 +72,7 @@
       <%= select_tag :owner,
                      options_from_collection_for_select(assignment_options.owners, :id, :email_address, params[:owner]) +
                        options_for_select([ [ "unassigned", Ops::CaseQuery::UNASSIGNED ], [ "me", "me" ] ], params[:owner]),
-                     include_blank: "any", data: { action: "change->queue#applyFilters" } %>
+                     include_blank: "any", data: { action: "change->autosubmit#submit" } %>
     </div>
 
     <div class="filterbar-divider" aria-hidden="true"></div>
@@ -81,12 +81,12 @@
       <%= label_tag :sort, "Sort" %>
       <%= select_tag :sort,
                      options_for_select(Ops::CaseQuery::SORTS.map { |key, s| [ s[:label], key ] }, @query.sort),
-                     data: { action: "change->queue#applyFilters" } %>
+                     data: { action: "change->autosubmit#submit" } %>
     </div>
 
     <span class="spacer"></span>
 
-    <%= submit_tag "Apply filters", class: "btn btn-sm", data: { queue_target: "apply" } %>
+    <%= submit_tag "Apply filters", class: "btn btn-sm", data: { autosubmit_target: "submit" } %>
     <% if filters.except("status").any? %>
       <%= link_to "Clear", ops_cases_path(status: @tab), class: "btn btn-ghost btn-sm" %>
     <% end %>

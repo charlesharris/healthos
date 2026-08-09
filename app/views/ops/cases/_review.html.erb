@@ -20,6 +20,9 @@
     timeline filter does not silently throw away the region being examined. %>
 <% chart_path = { controller: "/ops/cases", action: "show", id: case_record.id } %>
 <% chart_path = chart_path.merge(key: telemetry.semantic_key) if telemetry&.semantic_key %>
+<%# Scope filters ride on every link, or a drill-down would be undone by the
+    next click on a measure or a timeline filter. %>
+<% chart_path = chart_path.merge(where: telemetry.filters) if telemetry&.filters.present? %>
 <% review_path = telemetry && !telemetry.selection.from_signal? ?
                    chart_path.merge(telemetry.selection.to_params) : chart_path %>
 
@@ -57,6 +60,9 @@
             of attributes — and the attributes are right underneath to check it
             against. %>
         <% if telemetry&.any_data? %>
+          <%= render "ops/cases/scope", profile: telemetry, base_path: review_path,
+                     frame_id: drawer ? "case_drawer" : nil %>
+
           <section class="section">
             <h2 class="section-title">Distribution</h2>
             <%= render "ops/cases/distribution",
@@ -66,7 +72,8 @@
                        frame_id: drawer ? "case_drawer" : nil %>
           </section>
 
-          <%= render "ops/cases/dimensions", profile: telemetry %>
+          <%= render "ops/cases/dimensions", profile: telemetry,
+                     base_path: review_path, frame_id: drawer ? "case_drawer" : nil %>
         <% end %>
 
         <section class="section">

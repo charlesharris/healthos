@@ -81,6 +81,10 @@
         <div class="dim-head">
           <span class="dim-title"><%= dimension.label %></span>
           <span class="dim-kind"><%= dimension.kind %></span>
+          <% if dimension.filter_key && profile.filters.key?(dimension.filter_key) %>
+            <%= link_to "clear", scope_path(base_path, profile.filters, remove: dimension.filter_key),
+                        class: "dim-clear", data: { turbo_frame: frame_id || "_top" } %>
+          <% end %>
         </div>
 
         <%# A dimension with one value in both windows has nothing to draw two
@@ -92,14 +96,33 @@
         <% if dimension.unchanged? %>
           <p class="dim-unchanged">
             <span class="dim-unchanged-mark" aria-hidden="true">=</span>
-            unchanged — all readings <strong><%= dimension.rows.first.label %></strong>
+            <% if profile.filters.key?(dimension.filter_key.to_s) %>
+              scoped to <strong><%= dimension.rows.first.label %></strong>
+            <% else %>
+              unchanged — all readings <strong><%= dimension.rows.first.label %></strong>
+            <% end %>
           </p>
         <% else %>
           <% dimension.rows.each do |row| %>
-            <div class="dim-row">
+            <% drillable = dimension.filter_key && row.value.present? && !profile.filters.key?(dimension.filter_key) %>
+            <div class="<%= class_names("dim-row", "is-drillable" => drillable) %>">
               <div class="dim-row-head">
-                <span class="<%= class_names("dim-row-label truncate", "mono" => row.handle.present?) %>"
-                      title="<%= row.label %>"><%= row.label %></span>
+                <%# Clicking a value scopes the whole view to it — the half of
+                    the loop the strip was missing. Folded "other" rows are not
+                    drillable: they stand for several values, and filtering by a
+                    bucket the operator cannot name is not a drill-down. %>
+                <% label_classes = class_names("dim-row-label truncate", "mono" => row.handle.present?) %>
+                <% if drillable %>
+                  <%= link_to scope_path(base_path, profile.filters, add: { dimension.filter_key => row.value }),
+                              class: "#{label_classes} dim-drill",
+                              title: "Scope everything to #{row.label}",
+                              data: { turbo_frame: frame_id || "_top" } do %>
+                    <%= row.label %><span class="dim-drill-mark" aria-hidden="true">⤵</span>
+                  <% end %>
+                <% else %>
+                  <span class="<%= label_classes %>" title="<%= row.label %>"><%= row.label %></span>
+                <% end %>
+
                 <span class="dim-row-values">
                   <span class="shares"><%= format_share(row.baseline_share) %> → <%= format_share(row.selection_share) %></span>
                   <span class="faint counts"><%= row.baseline_count %> → <%= row.selection_count %></span>

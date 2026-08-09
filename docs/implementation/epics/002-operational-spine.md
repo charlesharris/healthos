@@ -112,6 +112,51 @@ land), bulk clinical actions.
 
 ## Decision Log
 
+### 2026-08-09 — the exploration loop: drill-down and scope
+
+The chart and the strip could show you a difference and then leave you there.
+Honeycomb's loop is query → see → refine → repeat; ours stopped at *see*. In
+BubbleUp every dimension bar is a control — you notice manual entry is 47% of a
+region, click it, and the whole view scopes to it. Our strip was a read-only
+report, which is the half that was missing.
+
+**Clicking a dimension value now scopes everything.** Density, the subject's
+marks, every profile and every denominator move together, so the chart and the
+breakdown can never describe different populations. Filters stack, and each is
+a removable chip in a scope bar above the chart — Honeycomb's WHERE row, and it
+earns its place for a specific reason: once a view is scoped, every share below
+means something different, and a reader who cannot see the scope will read them
+as though it were not there.
+
+Expressed as URLs, like the drag selection: linkable, back/forward works, the
+server recomputes through the same tenant-scoped query, and the read stays
+audited.
+
+`FILTERABLE` is a whitelist, not a passthrough — these keys become column and
+association names and the values arrive from the query string. Filters apply
+as ordinary Active Record association conditions, so no filter value reaches
+SQL as text. An unknown dimension is ignored rather than refused, because a
+stale link should still render a chart.
+
+Two smaller things:
+
+* **Drilling to a single subject on Explore turns the cohort view into theirs**
+  — their readings appear as marks over the program density they came from,
+  which is the whole point of having drilled. Resolved through the tenant
+  scope; a handle from another organization does not resolve at all.
+* **Folded "other" rows are not drillable.** They stand for several values, and
+  filtering by a bucket the operator cannot name is not a drill-down.
+
+Filter submission moved to a shared `autosubmit` controller. Explore still
+wanted an Apply click while the queue submitted on change; two copies of
+"submit when a control changes" would have kept drifting.
+
+And the same bug as last time, in a new place: the scope chip printed
+`sub hxm41yx8zzd1e28ble8o`, having humanized an opaque handle. `FILTERABLE`
+now marks which values are identifiers so nothing runs `tr("_", " ")` over
+them. Worth noting it recurred within a day of the first fix — the general
+rule is that enum values and identifiers must not share a formatting path.
+
 ### 2026-08-09 — the timeline was 63 lines of arriving and 3 of happening
 
 HO §90 asks for observations, signals, case events, dispositions and workflow

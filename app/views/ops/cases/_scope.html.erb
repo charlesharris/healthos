@@ -1,0 +1,35 @@
+<%# What the whole view is currently narrowed to.
+
+    Honeycomb's WHERE row, and it earns its place for the same reason: once a
+    view is scoped, every share and every denominator below means something
+    different, and a reader who cannot see the scope will read them as though
+    it were not there.
+
+    Locals: profile, base_path, frame_id. %>
+<% if profile.filters.any? %>
+  <div class="scope">
+    <span class="scope-label">Scoped to</span>
+
+    <% profile.filters.each do |key, value| %>
+      <span class="scope-chip">
+        <span class="scope-chip-key"><%= Ops::TelemetryProfileQuery.filter_label(key) %></span>
+        <span class="scope-chip-value <%= "mono" if Ops::TelemetryProfileQuery.opaque_filter?(key) %>"
+        ><%= Ops::TelemetryProfileQuery.filter_value_label(key, value) %></span>
+        <%= link_to scope_path(base_path, profile.filters, remove: key),
+                    class: "scope-chip-remove",
+                    aria: { label: "Remove #{Ops::TelemetryProfileQuery.filter_label(key)} filter" },
+                    data: { turbo_frame: frame_id || "_top" } do %>×<% end %>
+      </span>
+    <% end %>
+
+    <% if profile.filters.length > 1 %>
+      <%= link_to "Clear all", base_path.except(:where),
+                  class: "btn btn-ghost btn-sm",
+                  data: { turbo_frame: frame_id || "_top" } %>
+    <% end %>
+
+    <span class="scope-note muted">
+      Every count below is within this scope.
+    </span>
+  </div>
+<% end %>

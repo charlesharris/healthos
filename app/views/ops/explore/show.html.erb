@@ -9,7 +9,10 @@
     omission. %>
 <% content_for :title, "Explore" %>
 <% base = { controller: "/ops/explore", action: "show",
-            range_from: @range.from.to_date, range_to: @range.to.to_date } %>
+            range_from: @range.from.to_date, range_to: @range.to.to_date,
+            key: @telemetry.semantic_key } %>
+<% base = base.merge(where: @telemetry.filters) if @telemetry.filters.present? %>
+<% selected_base = @telemetry.selection.none? ? base : base.merge(@telemetry.selection.to_params) %>
 
 <div class="page-head">
   <div>
@@ -23,27 +26,31 @@
 
 <%= render "layouts/flash" %>
 
-<%= form_with url: url_for(controller: "/ops/explore", action: "show"), method: :get, class: "filterbar" do %>
+<%= form_with url: url_for(controller: "/ops/explore", action: "show"), method: :get,
+              class: "filterbar", data: { controller: "autosubmit" } do %>
   <div class="filter">
     <%= label_tag :key, "Measure" %>
     <%= select_tag :key,
                    options_for_select(@telemetry.available_keys.map { |key|
                      [ key.split(".").last.tr("_", " "), key ]
-                   }, @telemetry.semantic_key) %>
+                   }, @telemetry.semantic_key),
+                   data: { action: "change->autosubmit#submit" } %>
   </div>
 
   <div class="filterbar-divider" aria-hidden="true"></div>
 
   <div class="filter">
     <%= label_tag :range_from, "From" %>
-    <%= date_field_tag :range_from, @range.from.to_date %>
+    <%= date_field_tag :range_from, @range.from.to_date,
+                       data: { action: "change->autosubmit#submit" } %>
   </div>
   <div class="filter">
     <%= label_tag :range_to, "To" %>
-    <%= date_field_tag :range_to, @range.to.to_date %>
+    <%= date_field_tag :range_to, @range.to.to_date,
+                       data: { action: "change->autosubmit#submit" } %>
   </div>
 
-  <%= submit_tag "Apply", class: "btn btn-sm" %>
+  <%= submit_tag "Apply", class: "btn btn-sm", data: { autosubmit_target: "submit" } %>
 
   <span class="spacer"></span>
   <span class="tiny faint">
@@ -52,9 +59,11 @@
 <% end %>
 
 <% if @telemetry.any_data? %>
+  <%= render "ops/cases/scope", profile: @telemetry, base_path: selected_base, frame_id: nil %>
+
   <section class="section">
     <%= render "ops/cases/distribution",
-               profile: @telemetry, base_path: base, key_param: :key, frame_id: nil %>
+               profile: @telemetry, base_path: base.except(:key), key_param: :key, frame_id: nil %>
   </section>
 
   <% if @telemetry.selection.none? %>
@@ -64,7 +73,8 @@
       the baseline. The breakdown appears here.
     </div>
   <% else %>
-    <%= render "ops/cases/dimensions", profile: @telemetry %>
+    <%= render "ops/cases/dimensions", profile: @telemetry,
+               base_path: selected_base, frame_id: nil %>
 
     <%# The point of noticing something here is to go and look at the work it
         belongs to. Nothing on this surface creates a Case — only a Monitor

@@ -106,6 +106,11 @@ module Ops
 
     Profile = Struct.new(:key, :label, :kind, :note, :rows, :baseline_total, :selection_total,
                          :unit_label, :truncated_from, keyword_init: true) do
+      # Whether a row in this dimension can be drilled into. Folded "other"
+      # rows never can — they stand for several values, and filtering by a
+      # bucket the operator cannot name is not a drill-down.
+      def filter_key = FILTERABLE.key?(key.to_s) ? key.to_s : nil
+
       # One value present on both sides: nothing moved. Reported as a sentence
       # rather than two full-width bars — and still reported, because "the
       # instrumentation did not change" is an answer, and dropping the card
@@ -115,7 +120,11 @@ module Ops
       end
     end
 
-    ProfileRow = Struct.new(:label, :baseline_count, :selection_count,
+    # `value` is the raw column value the row was counted under — what a
+    # drill-down filters by. `label` is what a human reads. They differ
+    # (`device_automatic` vs "device automatic"), and using the label as the
+    # filter would send prose to the database.
+    ProfileRow = Struct.new(:label, :value, :baseline_count, :selection_count,
                             :baseline_share, :selection_share, :handle, keyword_init: true)
 
     Stat = Struct.new(:label, :baseline, :selection, :note, keyword_init: true)
@@ -123,13 +132,31 @@ module Ops
     DEFAULT_BASELINE_DAYS = 21
     BAND_TARGET = 10
 
+    # Dimensions an operator may narrow the whole view by.
+    #
+    # A whitelist, not a passthrough: these keys become column and association
+    # names, and the values arrive from the query string. Anything not named
+    # here is ignored rather than refused — a stale link with a dimension that
+    # no longer exists should still render the chart.
+    FILTERABLE = {
+      "recording_method" => { column: :recording_method, label: "Recording method" },
+      "quality_state" => { column: :quality_state, label: "Quality state" },
+      "source" => { association: :source, table: :sources, column: :key, label: "Source" },
+      # `opaque` marks a value that is an identifier rather than an enum, so
+      # nothing humanizes it. Underscores separate words in `device_automatic`
+      # and are load-bearing in `sub_hxm41…`; the same tr() that fixes the
+      # first corrupts the second.
+      "subject" => { association: :subject, table: :subjects, column: :public_id,
+                     label: "Subject", opaque: true }
+    }.freeze
+
     # A dimension with dozens of values is a table, not a chart. The remainder
     # is folded into one row and the fold is stated on the card — a silent
     # top-N reads as "these are all of them".
     MAX_ROWS = 8
 
     def initialize(organization:, range:, selection:, subject: nil, semantic_key: nil,
-                   preferred_keys: [], membership: nil)
+                   preferred_keys: [], filters: {}, membership: nil)
       super(organization: organization, membership: membership)
 
       @subject = subject
@@ -137,9 +164,25 @@ module Ops
       @selection = selection
       @requested_key = semantic_key
       @preferred_keys = Array(preferred_keys)
+      @filters = (filters || {}).stringify_keys.slice(*FILTERABLE.keys).compact_blank
     end
 
-    attr_reader :subject, :range, :selection
+    attr_reader :subject, :range, :selection, :filters
+
+    # Narrows everything on screen — density, marks and every profile — so the
+    # chart and the breakdown never describe different populations. Denominators
+    # move with it, which is the point: "47% of readings" means something
+    # different once the view is scoped, and the chips say what it is scoped to.
+    def self.filter_label(key) = FILTERABLE.dig(key, :label) || key.humanize
+
+    def self.opaque_filter?(key) = FILTERABLE.dig(key, :opaque).present?
+
+    # What a filter value reads as. Enum values are humanized; identifiers are
+    # left exactly as they are, because an operator has to be able to compare
+    # one against a queue row and copy it.
+    def self.filter_value_label(key, value)
+      opaque_filter?(key) ? value.to_s : value.to_s.tr("_", " ")
+    end
 
     def focused? = subject.present?
 
@@ -358,16 +401,35 @@ module Ops
     def scoped_observations = focused? ? subject_observations : cohort_observations
 
     def subject_observations
-      for_tenant(Observation.all)
-        .where(subject_id: subject.id)
-        .where(observed_at: range.from...range.to)
-        .where(quality_state: "observed")
+      narrowed(
+        for_tenant(Observation.all)
+          .where(subject_id: subject.id)
+          .where(observed_at: range.from...range.to)
+          .where(quality_state: "observed")
+      )
     end
 
     def cohort_observations
-      for_tenant(Observation.all)
-        .where(observed_at: range.from...range.to)
-        .where(quality_state: "observed")
+      narrowed(
+        for_tenant(Observation.all)
+          .where(observed_at: range.from...range.to)
+          .where(quality_state: "observed")
+      )
+    end
+
+    # Association conditions rather than string fragments, so no filter value
+    # ever reaches SQL as text. The keys are whitelisted in FILTERABLE; the
+    # values are bound.
+    def narrowed(relation)
+      filters.reduce(relation) do |scoped, (key, value)|
+        definition = FILTERABLE.fetch(key)
+
+        if definition[:association]
+          scoped.joins(definition[:association]).where(definition[:table] => { definition[:column] => value })
+        else
+          scoped.where(definition[:column] => value)
+        end
+      end
     end
 
     def keyed(relation) = semantic_key.present? ? relation.where(semantic_key: semantic_key) : relation
@@ -429,7 +491,8 @@ module Ops
         # Underscores are separators in an enum value (`device_automatic`) and
         # load-bearing in an opaque handle (`sub_90rd…`). Humanizing the second
         # corrupts an identifier the operator is meant to be able to copy.
-        ProfileRow.new(label: handle.presence || value.to_s.tr("_", " "), handle: handle,
+        ProfileRow.new(label: handle.presence || value.to_s.tr("_", " "),
+                       value: value.to_s, handle: handle,
                        baseline_count: base, selection_count: sel,
                        baseline_share: share(base, baseline_total),
                        selection_share: share(sel, selection_total))

@@ -1,18 +1,16 @@
 import { Controller } from "@hotwired/stimulus"
 
-// The Ops Queue: filter behaviour and keyboard triage.
+// The Ops Queue: row selection and keyboard triage.
 //
-// Everything here is enhancement. Without JavaScript the filter bar is an
-// ordinary GET form with a visible Apply button, and every row is an ordinary
-// link — which is why the Apply button is hidden here, at runtime, rather
-// than omitted from the markup.
+// Filter submission lives in autosubmit_controller, shared with Explore —
+// two copies of "submit when a control changes" would eventually disagree
+// about which one does it.
+//
+// Everything here is enhancement: without JavaScript every row is an ordinary
+// link and the filter bar is an ordinary GET form.
 export default class extends Controller {
-  static targets = ["form", "apply", "row"]
+  static targets = ["row"]
   static values = { currentCase: String }
-
-  connect() {
-    if (this.hasApplyTarget) this.applyTarget.hidden = true
-  }
 
   // Acting on a Case from the drawer replaces its row via Turbo stream, and
   // the replacement arrives without the selection class — the server has no
@@ -22,13 +20,6 @@ export default class extends Controller {
     if (this.currentCaseValue && row.dataset.caseId === this.currentCaseValue) {
       row.classList.add("is-current")
     }
-  }
-
-  // Changing a filter is the intent; making the operator then press Apply is
-  // a second step that exists only because the form was built before the
-  // behaviour was.
-  applyFilters() {
-    this.formTarget.requestSubmit()
   }
 
   // The whole row is a click target, but only where a click means "open this

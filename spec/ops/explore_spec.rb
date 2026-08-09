@@ -163,6 +163,69 @@ RSpec.describe "Ops Explore", type: :request do
     end
   end
 
+  describe "drilling into a dimension" do
+    let!(:mine) { Subject.create!(organization: organization, timezone: "UTC") }
+    let!(:other) { Subject.create!(organization: organization, timezone: "UTC") }
+
+    before do
+      seed_reading(org: organization, subject: mine, days_ago: 3, value: 165)
+      seed_reading(org: organization, subject: other, days_ago: 3, value: 118, minute: 1)
+    end
+
+    it "shows the active scope so the counts below can be read correctly" do
+      get ops_explore_path(**range_params, where: { subject: mine.public_id })
+
+      expect(response.body).to include("Scoped to")
+      expect(response.body).to include("Every count below is within this scope")
+    end
+
+    # The handle has to survive verbatim: an operator compares it against a
+    # queue row and copies it. Humanizing enum values corrupts identifiers.
+    it "keeps an opaque handle intact in the scope chip" do
+      get ops_explore_path(**range_params, where: { subject: mine.public_id })
+
+      expect(response.body).to include(mine.public_id)
+      expect(response.body).not_to include(mine.public_id.tr("_", " "))
+    end
+
+    it "still humanizes an enum filter value" do
+      get ops_explore_path(**range_params, where: { recording_method: "device_automatic" })
+
+      expect(response.body).to include("device automatic")
+    end
+
+    # Drilling all the way to one subject turns the cohort view into theirs.
+    it "plots the subject's own readings once scoped to them" do
+      get ops_explore_path(**range_params, where: { subject: mine.public_id })
+
+      expect(response.body).to include("subject · baseline")
+    end
+
+    # A stale link should show the cohort, not an error page.
+    it "ignores an unknown handle rather than failing" do
+      get ops_explore_path(**range_params, where: { subject: "sub_nope" })
+
+      expect(response).to have_http_status(:ok)
+    end
+
+    # INV-31 again, on the drill-down path this time.
+    it "does not resolve a handle from another organization" do
+      theirs = Subject.create!(organization: other_organization, timezone: "UTC")
+
+      get ops_explore_path(**range_params, where: { subject: theirs.public_id })
+
+      expect(response).to have_http_status(:ok)
+      expect(response.body).not_to include("subject · baseline")
+    end
+
+    it "ignores a dimension that is not on the whitelist" do
+      get ops_explore_path(**range_params, where: { organization_id: "x" })
+
+      expect(response).to have_http_status(:ok)
+      expect(response.body).not_to include("Scoped to")
+    end
+  end
+
   # S2C-003: Monitors create Signals, and nothing else creates Cases. A
   # surface where an operator notices something must not become a second way
   # to open work, or the correlation guarantees stop meaning anything.

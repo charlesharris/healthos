@@ -1499,6 +1499,75 @@ html.drawer-open .main { padding-right: calc(var(--drawer-w) + 1.5rem); }
 
 /* ---- "What was different?" dimension strip ---------------------------- */
 
+/* ---- Scope (the active dimension filters) ------------------------------ */
+
+.scope {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+  padding: 0.4rem 0.55rem;
+  margin-bottom: 0.75rem;
+  border: 1px solid var(--accent-border);
+  border-radius: var(--radius);
+  background: var(--accent-softer);
+  font-size: 0.75rem;
+}
+.scope-label {
+  font-size: 0.625rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.scope-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.1rem 0.2rem 0.1rem 0.4rem;
+  border: 1px solid var(--accent-border);
+  border-radius: 3px;
+  background: var(--surface);
+}
+.scope-chip-key { color: var(--text-muted); font-size: 0.6875rem; }
+.scope-chip-value { font-weight: 600; color: var(--accent); }
+.scope-chip-value.mono { font-family: var(--mono); font-size: 0.6875rem; font-weight: 500; }
+.scope-chip-remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1rem;
+  height: 1rem;
+  border-radius: 2px;
+  color: var(--text-muted);
+  line-height: 1;
+}
+.scope-chip-remove:hover { background: var(--danger-soft); color: var(--danger); text-decoration: none; }
+.scope-note { margin-left: auto; font-size: 0.6875rem; }
+
+/* A drillable value looks like what it is: something you can click to narrow
+   everything by. The affordance appears on hover so twenty of them do not
+   shout at once. */
+.dim-drill { color: var(--text-secondary); display: inline-flex; align-items: baseline; gap: 0.2rem; }
+.dim-drill:hover { color: var(--accent); text-decoration: none; }
+.dim-drill-mark { opacity: 0; font-size: 0.625rem; }
+.dim-row:hover .dim-drill-mark, .dim-drill:focus-visible .dim-drill-mark { opacity: 0.7; }
+.dim-row.is-drillable:hover { background: var(--accent-softer); border-radius: 3px; }
+
+.dim-clear {
+  margin-left: auto;
+  font-size: 0.625rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.dim-clear:hover { color: var(--danger); text-decoration: none; }
+
+/* While Turbo is fetching, hold the previous render at reduced opacity rather
+   than flashing a skeleton — no layout jump, and the numbers being replaced
+   stay readable until the new ones arrive. */
+.turbo-busy .chart, .turbo-busy .dims, .turbo-busy .scope { opacity: 0.55; transition: opacity 120ms linear; }
+turbo-frame[busy] .chart, turbo-frame[busy] .dims, turbo-frame[busy] .scope { opacity: 0.55; }
+
 .dims { display: grid; grid-template-columns: repeat(auto-fill, minmax(17.5rem, 1fr)); gap: 0.6rem; }
 
 .dim {

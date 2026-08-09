@@ -159,9 +159,11 @@ RSpec.describe "Quick Review telemetry profile", type: :model do
       # evidence at — which is a citation of the contract, not a claim about
       # this comparison. The distinction is the point: this object reports
       # what is in the database and defers judgement to an artifact.)
+      # Counts, shares, and the identifiers needed to label and drill into a
+      # row. Nothing that grades it.
       row = result.profiles.first.rows.first
       expect(row.members).to contain_exactly(
-        :label, :handle, :baseline_count, :selection_count, :baseline_share, :selection_share
+        :label, :value, :handle, :baseline_count, :selection_count, :baseline_share, :selection_share
       )
     end
 
@@ -379,6 +381,87 @@ RSpec.describe "Quick Review telemetry profile", type: :model do
 
         expect(outside.clamp_to(range)).to be_nil
       end
+    end
+  end
+
+  # The half of the exploration loop the strip was missing: notice that manual
+  # entry is most of a region, scope everything to it, look again.
+  describe "drilling into a dimension" do
+    before do
+      2.times { |i| observe(days_ago: 20 + i, method: "device_automatic") }
+      observe(days_ago: 3, method: "manual_entry", source: manual)
+    end
+
+    def scoped(filters) = profile(subject: subject_record).then { profile_with(filters) }
+
+    def profile_with(filters)
+      Ops::TelemetryProfileQuery.new(
+        organization: organization, subject: subject_record, range: range,
+        selection: selection, filters: filters
+      )
+    end
+
+    # The chart and the breakdown must never describe different populations.
+    it "narrows the marks, the density and every profile together" do
+      scoped = profile_with("recording_method" => "manual_entry")
+
+      expect(scoped.readings.length).to eq(1)
+      expect(scoped.cohort_cells.sum(&:count)).to eq(1)
+      expect(scoped.coverage_stats.index_by(&:label)["Readings"].selection).to eq(1)
+    end
+
+    it "moves the denominators with the scope, which is the point of showing them" do
+      unscoped = profile_with({})
+      scoped = profile_with("recording_method" => "manual_entry")
+
+      expect(unscoped.coverage_stats.index_by(&:label)["Readings"].baseline).to eq(2)
+      expect(scoped.coverage_stats.index_by(&:label)["Readings"].baseline).to eq(0)
+    end
+
+    it "filters across an association without raw SQL" do
+      scoped = profile_with("source" => "manual")
+
+      expect(scoped.readings.length).to eq(1)
+    end
+
+    it "combines filters" do
+      expect(profile_with("recording_method" => "manual_entry", "source" => "cuff").readings).to be_empty
+      expect(profile_with("recording_method" => "manual_entry", "source" => "manual").readings.length).to eq(1)
+    end
+
+    # These keys become column and association names.
+    it "ignores a dimension that is not on the whitelist" do
+      scoped = profile_with("organization_id" => "whatever", "recording_method" => "manual_entry")
+
+      expect(scoped.filters).to eq("recording_method" => "manual_entry")
+      expect(scoped.readings.length).to eq(1)
+    end
+
+    it "treats a filter value as a value, never as SQL" do
+      scoped = profile_with("recording_method" => "manual_entry'; DROP TABLE observations; --")
+
+      expect(scoped.readings).to be_empty
+      expect(Observation.count).to eq(3)
+    end
+
+    it "drops a blank filter rather than matching on emptiness" do
+      expect(profile_with("recording_method" => "").filters).to be_empty
+    end
+
+    # Rows carry the raw value, because the label is prose.
+    it "exposes the raw value a row would be filtered by" do
+      row = profile_with({}).profiles
+        .find { |d| d.key == :recording_method }.rows
+        .find { |r| r.label == "manual entry" }
+
+      expect(row.value).to eq("manual_entry")
+      expect(row.label).to eq("manual entry")
+    end
+
+    it "names the dimensions that can be drilled into" do
+      keys = profile_with({}).profiles.filter_map(&:filter_key)
+
+      expect(keys).to include("recording_method", "quality_state", "source")
     end
   end
 
