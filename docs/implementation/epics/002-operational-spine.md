@@ -36,12 +36,14 @@ Epic 003); S2C-004→017, S2C-023, S2C-025.
 ## Tasks
 
 ### Measurement semantics (Milestone 2)
-- [ ] 002-01 Expected-measurement model (`Measurement::Expectation`,
+- [x] 002-01 Expected-measurement model (`Measurement::Expectation`,
       §27): expected / not_expected / unknown opportunities
-- [ ] 002-02 Full missingness taxonomy on observation pipeline (§28);
-      spec: no path zero-imputes (STAT-002)
-- [ ] 002-03 Completeness + completeness_delta derived signals with
-      explicit denominators (STAT-011)
+- [x] 002-02 Full missingness taxonomy on observation pipeline (§28);
+      spec: no path zero-imputes (STAT-002) — taxonomy landed in 001-07's
+      CHECK constraint; completeness now reports by state
+- [~] 002-03 Completeness with explicit denominators (STAT-011) —
+      `Measurement::Completeness` done; completeness_delta derived
+      signal lands with 002-04's derivation batch
 - [ ] 002-04 Measurement-frequency, days_since_last,
       manual_entry_frequency derived signals (§29)
 - [ ] 002-05 Source-change + recording-method-change derivation using
@@ -108,4 +110,39 @@ land), bulk clinical actions.
 
 ## Decision Log
 
-_(append here)_
+### 2026-08-09 — 002-01 to 002-03 measurement semantics
+
+**Three states, and `unknown` is not folded into either neighbour.**
+HO §27 asks for expected / not_expected / unknown, and the distinction
+carries weight: treating `unknown` as `not_expected` silently inflates
+completeness, while treating it as `expected` fabricates gaps that may
+not exist. A dimension with no declared expectation model returns
+`Indeterminate`, and completeness over it reports **no ratio at all**
+rather than 0 or 1 — both of which would be assertions we cannot make.
+
+**Completeness counts distinct expected DAYS, not observations**
+(STAT-005). Three readings on one day are one day's worth; counting
+observations would let a single enthusiastic day mask a week of silence.
+
+**The denominator is part of the value, not a footnote.** `Result#to_s`
+renders "71.4% (5/7)" because SC §14 requires both and 70% of ten days
+is not the same evidence as 70% of a hundred.
+
+**No evidence-ceiling helpers on the result object.** It would have been
+convenient to add `weak?`/`strong?` reading STAT-012's bands, and
+deliberately is not: mapping completeness to an evidence ceiling is the
+gate's job in 003-14, and scattering a governed threshold into a
+calculation object is how it stops being reviewable.
+
+**Missingness is reported by state, not as a total.** An instrumentation
+gap and a behavioural one reduce completeness identically but mean
+different things (STAT-003), so `missing_by_state` preserves the
+ten-state taxonomy all the way into the completeness report.
+
+**A DST bug in my own spec, worth recording.** The first window ran
+02:00 UTC to 04:59 UTC across 8 March 2026 — the US DST transition — and
+silently spanned eight local days instead of seven, so a weekday count
+came out 6 rather than 5. My expectation was wrong, not the code. This
+is precisely the class of error HO §121 makes a required regression
+case, and it appeared within an hour of writing the first completeness
+window.
