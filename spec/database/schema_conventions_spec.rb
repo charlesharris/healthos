@@ -75,11 +75,19 @@ RSpec.describe "Schema conventions", type: :model do
 
   # HO §10.1 / §12: every tenant-facing table carries organization_id directly,
   # "even if derivable through another association".
+  # Exemptions, each with a reason:
+  #   organizations   is the tenant root; its own id is the tenant key
+  #   users, sessions global by HO §10.2 — a user may belong to several orgs
+  #   staff_members   platform-level, deliberately cross-tenant
+  #   audit_events    organization_id is nullable because platform-level staff
+  #                   actions genuinely have no tenant (see the migration)
   it "gives every tenant-facing table a NOT NULL organization_id" do
     exempt = %w[
       schema_migrations ar_internal_metadata
       organizations
       users sessions
+      staff_members
+      audit_events
     ].to_set
 
     tables = connection.tables.reject { |t| exempt.include?(t) }

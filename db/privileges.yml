@@ -87,6 +87,10 @@ mutable:
   - watch_conditions          # satisfied/cancelled, HO §45
   - workflow_actions          # retry and dispatch state
 
+  # Platform staff access. Not tenant-scoped: staff see across
+  # organizations, which is why every staff action is audited.
+  - staff_members
+
   # Infrastructure
   - domain_events             # the outbox updates dispatch state, HO §49
                               # (dispatched_at, attempts, last_error)

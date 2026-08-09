@@ -1,4 +1,18 @@
 Rails.application.routes.draw do
+  namespace :admin do
+      resources :audit_events
+      resources :domain_events
+      resources :invitations
+      resources :organizations
+      resources :organization_memberships
+      resources :sessions
+      resources :staff_members
+      resources :teams
+      resources :team_memberships
+      resources :users
+
+      root to: "organizations#index"
+    end
   resource :session
   resources :passwords, param: :token
 

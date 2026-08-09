@@ -453,3 +453,63 @@ a schema change rather than a type choice.
 Note also that `db:migrate` on an empty database does not run migrations
 — `initialize_database` loads `structure.sql` instead. Building a schema
 genuinely from migrations requires the dump to be absent.
+
+### 2026-08-09 — Platform admin UI (out-of-band addition)
+
+Not an epic 001 task. Added on request for a *system administrator*
+surface, distinct from the provider-facing UI.
+
+**DEVIATION: the governing documents describe no system-administrator
+actor.** HO §11's roles, `support_limited` included, are
+OrganizationMembership roles scoped to one tenant. HO §157 requires
+"provider-safe internal tools" and says "support access must itself be
+audited", but never says who may use them. A `staff_members` table
+introduces that actor — a separate table rather than a flag on `users`,
+since CLAUDE.md forbids a global role field on User and a table also
+records who granted access and when.
+
+**Administrate**, chosen over Avo and ActiveAdmin because the governing
+constraint here is restriction, not features: it generates controllers
+and views we own and can strip. RailsAdmin was rejected outright —
+auto-discovering every model is precisely wrong for this schema.
+
+Scope is **config and identity only**: organizations, users,
+memberships, teams, invitations, sessions, staff members, plus
+read-only audit and domain events. Health evidence is absent by
+design and gets the task-shaped tooling HO §157 enumerates instead
+(001-08 provenance drilldown, 005-15 support tooling).
+
+Three things keep the cross-tenant exception to INV-31 honest:
+
+1. Access requires an active StaffMember, not an organization role. An
+   `organization_admin` — the most privileged tenant user — gets 404.
+2. Every mutation writes an `audit_events` row (HO §92 "Admin
+   configuration changed", HO §157). Field *names* only, never values.
+3. It runs as `healthos_app`, **not** `healthos_admin`. Append-only
+   grants therefore still apply, so no admin screen can mutate evidence
+   even if a dashboard were added by mistake. A spec asserts the
+   connection role.
+
+`spec/admin/admin_scope_spec.rb` guards the boundary by listing every
+forbidden resource and failing if a dashboard, controller or route
+appears for one. This matters because re-running `administrate:install`
+generates a dashboard for every model it finds — the day `subjects` or
+`observations` exists, a careless regeneration would otherwise expose
+health evidence through generic CRUD.
+
+Read-only enforcement needed two hooks, found by reading the gem rather
+than guessing: `authorized_action?` (Administrate's documented
+authorization hook, which gates the New/Edit/Destroy links) and a
+`before_action` that refuses the request. Hiding a control is
+presentation; refusing it is the control.
+
+**`audit_events` pulled forward from 002-24.** Shipping admin writes
+before the audit table would have made them unauditable by
+construction. The table is per HO §92 as written, with one deviation:
+`organization_id` is nullable, because platform-level staff actions
+genuinely have no tenant — editing a User, global by HO §10.2, is the
+clearest case. 002-24 extends it with the case and investigation event
+types.
+
+Side effect: `audit_events` is the first append-only table, so the two
+privilege specs that had been skipping since 001-01 now run for real.

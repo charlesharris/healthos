@@ -27,6 +27,26 @@ CREATE TABLE public.ar_internal_metadata (
 
 
 --
+-- Name: audit_events; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.audit_events (
+    id uuid DEFAULT uuidv7() NOT NULL,
+    organization_id uuid,
+    actor_id uuid NOT NULL,
+    event_type text NOT NULL,
+    subject_id uuid,
+    case_id uuid,
+    investigation_id uuid,
+    staff_member_id uuid,
+    occurred_at timestamp(6) without time zone NOT NULL,
+    metadata jsonb DEFAULT '{}'::jsonb NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL
+);
+
+
+--
 -- Name: domain_events; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -124,6 +144,24 @@ CREATE TABLE public.sessions (
 
 
 --
+-- Name: staff_members; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.staff_members (
+    id uuid DEFAULT uuidv7() NOT NULL,
+    user_id uuid NOT NULL,
+    status text DEFAULT 'active'::text NOT NULL,
+    granted_at timestamp(6) without time zone NOT NULL,
+    granted_by_id uuid,
+    revoked_at timestamp(6) without time zone,
+    note text,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT staff_members_status_check CHECK ((status = ANY (ARRAY['active'::text, 'revoked'::text])))
+);
+
+
+--
 -- Name: team_memberships; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -177,6 +215,14 @@ ALTER TABLE ONLY public.ar_internal_metadata
 
 
 --
+-- Name: audit_events audit_events_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.audit_events
+    ADD CONSTRAINT audit_events_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: domain_events domain_events_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -225,6 +271,14 @@ ALTER TABLE ONLY public.sessions
 
 
 --
+-- Name: staff_members staff_members_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.staff_members
+    ADD CONSTRAINT staff_members_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: team_memberships team_memberships_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -246,6 +300,48 @@ ALTER TABLE ONLY public.teams
 
 ALTER TABLE ONLY public.users
     ADD CONSTRAINT users_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: index_audit_events_on_actor_and_time; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_audit_events_on_actor_and_time ON public.audit_events USING btree (actor_id, occurred_at);
+
+
+--
+-- Name: index_audit_events_on_actor_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_audit_events_on_actor_id ON public.audit_events USING btree (actor_id);
+
+
+--
+-- Name: index_audit_events_on_org_and_time; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_audit_events_on_org_and_time ON public.audit_events USING btree (organization_id, occurred_at);
+
+
+--
+-- Name: index_audit_events_on_organization_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_audit_events_on_organization_id ON public.audit_events USING btree (organization_id);
+
+
+--
+-- Name: index_audit_events_on_staff_member_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_audit_events_on_staff_member_id ON public.audit_events USING btree (staff_member_id);
+
+
+--
+-- Name: index_audit_events_on_type_and_time; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_audit_events_on_type_and_time ON public.audit_events USING btree (event_type, occurred_at);
 
 
 --
@@ -354,6 +450,20 @@ CREATE INDEX index_sessions_on_user_id ON public.sessions USING btree (user_id);
 
 
 --
+-- Name: index_staff_members_on_granted_by_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_staff_members_on_granted_by_id ON public.staff_members USING btree (granted_by_id);
+
+
+--
+-- Name: index_staff_members_on_user_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_staff_members_on_user_id ON public.staff_members USING btree (user_id);
+
+
+--
 -- Name: index_team_memberships_on_org_and_team; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -418,11 +528,27 @@ ALTER TABLE ONLY public.invitations
 
 
 --
+-- Name: staff_members fk_rails_2925f894a8; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.staff_members
+    ADD CONSTRAINT fk_rails_2925f894a8 FOREIGN KEY (user_id) REFERENCES public.users(id);
+
+
+--
 -- Name: invitations fk_rails_3d8c31759f; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.invitations
     ADD CONSTRAINT fk_rails_3d8c31759f FOREIGN KEY (accepted_by_id) REFERENCES public.users(id);
+
+
+--
+-- Name: audit_events fk_rails_4463a8ee29; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.audit_events
+    ADD CONSTRAINT fk_rails_4463a8ee29 FOREIGN KEY (staff_member_id) REFERENCES public.staff_members(id);
 
 
 --
@@ -466,6 +592,14 @@ ALTER TABLE ONLY public.sessions
 
 
 --
+-- Name: staff_members fk_rails_81a4d9ebe4; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.staff_members
+    ADD CONSTRAINT fk_rails_81a4d9ebe4 FOREIGN KEY (granted_by_id) REFERENCES public.users(id);
+
+
+--
 -- Name: domain_events fk_rails_8afe43432b; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -474,11 +608,27 @@ ALTER TABLE ONLY public.domain_events
 
 
 --
+-- Name: audit_events fk_rails_be0ed9e37f; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.audit_events
+    ADD CONSTRAINT fk_rails_be0ed9e37f FOREIGN KEY (organization_id) REFERENCES public.organizations(id);
+
+
+--
 -- Name: invitations fk_rails_d799c974a1; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.invitations
     ADD CONSTRAINT fk_rails_d799c974a1 FOREIGN KEY (invited_by_id) REFERENCES public.users(id);
+
+
+--
+-- Name: audit_events fk_rails_dd1f3a471a; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.audit_events
+    ADD CONSTRAINT fk_rails_dd1f3a471a FOREIGN KEY (actor_id) REFERENCES public.users(id);
 
 
 --
@@ -504,6 +654,8 @@ ALTER TABLE ONLY public.team_memberships
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20260809080100'),
+('20260809080000'),
 ('20260809071500'),
 ('20260809065957'),
 ('20260809065956'),

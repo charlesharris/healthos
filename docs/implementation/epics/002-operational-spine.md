@@ -84,7 +84,9 @@ Epic 003); S2C-004→017, S2C-023, S2C-025.
       timeline, owner, actions, disposition controls (§88)
 - [ ] 002-23 Case timeline query object merging observations/events/
       signals/case_events (§90)
-- [ ] 002-24 `audit_events` for view/assign/state/disposition (§92)
+- [~] 002-24 `audit_events` for view/assign/state/disposition (§92)
+      — table created early alongside the admin UI (see epic 001 Decision
+      Log, 2026-08-09). Case/investigation event types still to add here.
 - [ ] 002-25 Concurrency specs: resolution vs Signal arrival; watch
       firing vs manual triage (§120)
 
