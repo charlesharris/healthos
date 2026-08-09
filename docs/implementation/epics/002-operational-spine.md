@@ -76,8 +76,8 @@ Epic 003); S2C-004→017, S2C-023, S2C-025.
 ### Lifecycle + queue (Milestone 5)
 - [x] 002-18 `Cases::Transition` with an explicit legality table;
       controllers never mutate Case state directly (S2C-013)
-- [~] 002-19 Watch conditions + satisfaction predicates (§45); the
-      periodic evaluation job lands with 002-21's queue work
+- [x] 002-19 Watch conditions + satisfaction predicates (§45) and the
+      periodic evaluation sweep (Cases::WatchEvaluationJob, every 15m)
 - [x] 002-20 Dispositions with §46 code list; resolution requires one
       (S2C-015)
 - [x] 002-21 Ops Queue v1: tabs/counts, filters, sort (priority → age →
@@ -89,7 +89,7 @@ Epic 003); S2C-004→017, S2C-023, S2C-025.
 - [~] 002-24 `audit_events` for view/assign/state/disposition (§92)
       — table created early alongside the admin UI (see epic 001 Decision
       Log, 2026-08-09). Case/investigation event types still to add here.
-- [ ] 002-25 Concurrency specs: resolution vs Signal arrival; watch
+- [x] 002-25 Concurrency specs: resolution vs Signal arrival; watch
       firing vs manual triage (§120)
 
 ## Out of Scope
@@ -104,11 +104,71 @@ land), bulk clinical actions.
       monitoring interruption and a reopened Case
 - [ ] Team walkthrough: operate the queue end-to-end without touching
       the console
-- [ ] All §120 concurrency specs pass in CI loop
+- [x] All §120 concurrency specs pass in CI loop
 - [ ] Do-not-ship list (§188) items re-checked: no Case duplication
       under concurrency, no hidden source changes
 
 ## Decision Log
+
+### 2026-08-09 — 002-19 watch sweep, 002-25 §120 races
+
+**A watch that never fires is worse than no watch.** Quick Review could
+park a Case with a stated condition for coming back; nothing brought it
+back. That is the same failure the platform exists to surface in patient
+data — monitoring that silently stopped — and having it in the tool
+itself was not defensible. `Cases::WatchEvaluationJob` sweeps every 15
+minutes; `Cases::EvaluateWatchConditions` fires the due ones.
+
+A sweep rather than `perform_later(wait_until: expires_at)`. The
+per-Case wakeup is cheaper but only works for timers —
+`new_observation_count` and `new_signal` have no due date — and a queue
+restart or a job pruned as stale would drop the wakeup with nothing to
+notice it. A sweep re-derives what is due from the database every run,
+so a missed tick delays a Case rather than losing it.
+
+**The machine reports; the human decides.** A satisfied condition
+returns a Case to `triaged` only if it is still `watching`. If a
+clinician already moved it on, the condition is closed out and the
+timeline records that it fired, but the state is left alone. This is
+§120's "watch firing concurrent with manual triage": the answer is not
+a lock, it is that the sweep has no authority to override a person.
+
+**System transitions are not provider access.** `Cases::Transition` now
+takes `actor_type:`, and a `system` transition writes the CaseEvent but
+no `audit_events` row. HO §92's audit answers "who looked at what" about
+*people*; logging a timer as a provider access would dilute the trail
+someone reads during an access review. Same reasoning as
+`Cases::RouteCase`. `actor_type` is explicit rather than inferred from
+`actor.nil?`, which is also true of a deleted user.
+
+**§120's resolution-vs-Signal race found a real bug.** The dangerous
+interleaving is not the obvious one. Correlation takes the scope lock
+and reads a Case as active; a clinician resolves it a moment later;
+correlation then writes. What actually happened: the correlation lost
+the optimistic-lock race, raised `StaleObjectError`, and the Signal
+survived only because the job would be retried — an error where there
+should have been an ordinary attach or reopen.
+
+The fix is that `Cases::Transition` takes the *same* scope lock when
+closing. Closing is the one transition that changes what correlation
+sees: a Signal at an active Case attaches, the same Signal at a resolved
+Case reopens it (S2C-016), and which is correct turns on a status read.
+Locking only closing transitions keeps routine queue movement
+(new→triaged, watching→investigating) out of correlation's way, and the
+lock is per organization+subject+domain, so unrelated subjects still
+close in parallel — asserted, not assumed.
+
+**Known gap, deliberately not closed here.** If correlation wins the
+race, the Signal attaches and the clinician's resolution then commits
+over evidence their screen never showed. The state is coherent and the
+timeline reads correctly (`signal_attached` strictly before `resolved`),
+so this is UI staleness, not a data-integrity defect — the same class as
+any two-operator race. Closing it properly means optimistic concurrency
+in Quick Review: the form carries what the operator saw, and the close
+is refused if the Case moved underneath them. That belongs with the
+Workbench in epic 004, not bolted onto Transition, and refusing closes
+on a `last_reviewed_at` heuristic instead would strand Cases with no way
+to close them at all.
 
 ### 2026-08-09 — styling, and a seeded operator account
 

@@ -38,10 +38,21 @@ module Cases
 
     def self.call(...) = new(...).call
 
-    def initialize(case_record:, to:, actor:, disposition: nil, watch: nil, payload: {})
+    # actor_type "system" is for transitions no person asked for — a watch
+    # condition firing, for example. It is not merely a null actor: it changes
+    # what gets audited (see below), so it has to be stated rather than
+    # inferred from `actor.nil?`, which is also true of a deleted user.
+    ACTOR_TYPES = %w[user system].freeze
+
+    def initialize(case_record:, to:, actor:, actor_type: "user", disposition: nil, watch: nil,
+                   payload: {})
+      raise ArgumentError, "unknown actor_type #{actor_type.inspect}" unless
+        ACTOR_TYPES.include?(actor_type.to_s)
+
       @case_record = case_record
       @to = to.to_s
       @actor = actor
+      @actor_type = actor_type.to_s
       @disposition = disposition
       @watch = watch
       @payload = payload
@@ -51,6 +62,8 @@ module Cases
       validate!
 
       ActiveRecord::Base.transaction do
+        serialize_against_correlation! if closing?
+
         from = @case_record.status
 
         apply_state_change(from)
@@ -60,20 +73,11 @@ module Cases
         CaseEvent.append!(
           case_record: @case_record,
           event_type: event_type_for(@to),
-          actor_type: "user", actor_id: @actor&.id,
+          actor_type: @actor_type, actor_id: @actor&.id,
           payload: { "from" => from, "to" => @to }.merge(@payload)
         )
 
-        # Audited here rather than in the controller: S2C-013 already routes
-        # every state change through this object, so auditing here means a
-        # caller cannot forget. HO §157 requires the trail to be complete, not
-        # merely conventional.
-        Audit.record!(:case_state_changed, case_record: @case_record, actor: @actor,
-                      metadata: { "from" => from, "to" => @to })
-        if closing?
-          Audit.record!(:disposition_entered, case_record: @case_record, actor: @actor,
-                        metadata: { "code" => @disposition.fetch(:code) })
-        end
+        record_access_audit(from)
 
         publish_if_closing
       end
@@ -103,12 +107,67 @@ module Cases
       raise DispositionRequired, "resolving or dismissing a Case requires a disposition (S2C-015)"
     end
 
+    # HO §120: "Case resolution concurrent with Signal arrival".
+    #
+    # Closing is the one transition that changes what correlation sees. A
+    # Signal arriving at an active Case attaches to it; the same Signal
+    # arriving a moment later, at a resolved Case, reopens it (S2C-016). Those
+    # are different, both correct, and the difference turns on a status read
+    # that correlation performs inside the scope lock.
+    #
+    # Without taking the same lock, a close can commit in the middle of a
+    # correlation that has already read this Case as active. What happened
+    # before this line existed: the correlation's write lost the optimistic
+    # lock race, raised StaleObjectError, and the Signal was dropped until a
+    # job retry picked it up — an error where there should have been a
+    # reopen.
+    #
+    # Closing only. new→triaged and watching→investigating do not change
+    # eligibility (both are active), so locking them would serialize routine
+    # queue work behind correlation for no benefit. The lock is per
+    # organization+subject+domain, so unrelated subjects still close in
+    # parallel.
+    def serialize_against_correlation!
+      CorrelationScope.lock_for!(
+        organization: @case_record.organization,
+        subject: @case_record.subject,
+        domain_key: @case_record.domain_key
+      )
+
+      # Re-read behind the lock. A correlation that just committed may have
+      # reopened this Case, in which case the status we validated against is
+      # stale and the close has to be re-judged against what is actually true.
+      @case_record.reload
+      validate!
+    end
+
     def apply_state_change(_from)
       attributes = { status: @to, last_reviewed_at: Time.current }
       attributes[:resolved_at] = Time.current if closing?
       attributes[:watch_until] = @watch[:expires_at] if @to == "watching" && @watch.present?
 
       @case_record.update!(attributes)
+    end
+
+    # Audited here rather than in the controller: S2C-013 already routes every
+    # state change through this object, so auditing here means a caller cannot
+    # forget. HO §157 requires the trail to be complete, not conventional.
+    #
+    # System transitions are deliberately excluded. HO §92's audit answers
+    # "who looked at what" about PEOPLE; a timer firing is not a provider
+    # accessing health data, and logging it as one would dilute the trail
+    # someone has to read during an access review. The event is still on the
+    # CaseEvent timeline, which is where machine activity belongs. Same
+    # reasoning as Cases::RouteCase.
+    def record_access_audit(from)
+      return unless @actor_type == "user"
+
+      Audit.record!(:case_state_changed, case_record: @case_record, actor: @actor,
+                    metadata: { "from" => from, "to" => @to })
+      return unless closing?
+
+      Audit.record!(:disposition_entered, case_record: @case_record, actor: @actor,
+                    metadata: { "code" => @disposition.fetch(:code) })
     end
 
     def record_disposition
@@ -122,7 +181,7 @@ module Cases
 
       CaseEvent.append!(
         case_record: @case_record, event_type: "disposition_recorded",
-        actor_type: "user", actor_id: @actor&.id,
+        actor_type: @actor_type, actor_id: @actor&.id,
         payload: { "code" => @disposition.fetch(:code) }
       )
     end

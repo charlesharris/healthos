@@ -1,15 +1,26 @@
-# examples:
-#   periodic_cleanup:
-#     class: CleanSoftDeletedRecordsJob
-#     queue: background
-#     args: [ 1000, { batch_size: 500 } ]
-#     schedule: every hour
-#   periodic_cleanup_with_command:
-#     command: "SoftDeletedRecord.due.delete_all"
-#     priority: 2
-#     schedule: at 5am every day
+# Recurring jobs (Solid Queue).
+#
+# Kept small on purpose. A cron entry is a place for behaviour to hide: it
+# runs where nobody is looking and fails where nobody is told. Anything that
+# belongs to a request or an event goes through the outbox (S2C-021) instead.
+
+shared: &shared
+  # HO §45 / S2C-014. A watch is a promise to come back, and this is what
+  # keeps it. Fifteen minutes because the conditions are hours-to-days scale
+  # (a watch period elapsing, new readings arriving) — polling faster would
+  # only add load, and the sweep re-derives what is due every run, so a missed
+  # tick delays a Case rather than losing it.
+  evaluate_watch_conditions:
+    class: Cases::WatchEvaluationJob
+    queue: default
+    schedule: every 15 minutes
+
+development:
+  <<: *shared
 
 production:
+  <<: *shared
+
   clear_solid_queue_finished_jobs:
     command: "SolidQueue::Job.clear_finished_in_batches(sleep_between_batches: 0.3)"
     schedule: every hour at minute 12
