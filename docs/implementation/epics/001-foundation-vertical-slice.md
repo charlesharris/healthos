@@ -44,8 +44,8 @@ semantics in Epic 002); provenance invariants 1–3.
       `Gemfile.lock`, `Dockerfile`, CI
 - [x] PostgreSQL 18, UUIDv7 primary keys, Solid Queue with separate
       queue database config
-- [x] Docker compose: postgres, object-store (MinIO) — web/worker
-      deviation recorded below
+- [x] Docker compose: web, worker, postgres, object-store (MinIO) —
+      the earlier web/worker deviation is now REVERSED, see 2026-08-09
 - [x] RSpec, lint (rubocop), brakeman, bundler-audit wired into CI
 - [x] `bin/setup`, `bin/dev`, `bin/test`, `bin/lint`, `bin/security`
 - [x] Health endpoint + one passing request spec (CI green pending
@@ -220,14 +220,12 @@ gets created, so the app role failed to boot with a confusing privilege
 error. `apply_to_env!` now creates `schema_migrations` and
 `ar_internal_metadata` as migrator, idempotently.
 
-**Deviation: docker compose does not run web/worker.** 001-01 asks for
-web and worker services. The prototype scope is local + CI only, the
-generated Dockerfile targets production, and native `bin/dev` (which
-runs Puma and `bin/jobs` together) is what we will actually use. Rather
-than declare compose services nobody runs, CI builds the production
-image on every commit so the Dockerfile cannot rot. Verified building
-locally. _Revisit if a hosted environment appears — see
-prototype-scope.md "Known tension"._
+**Deviation: docker compose does not run web/worker.** ~~001-01 asks for
+web and worker services...~~ **REVERSED 2026-08-09 (Charles): everything
+runs in containers.** See the entry at the end of this log. The original
+reasoning — that native `bin/dev` is what we would actually use — was
+wrong in a way that produced a real boot failure; keeping the app
+uncontainerised meant its environment was never exercised.
 
 **Local `pg_dump` is a hard dependency of `schema_format = :sql`.**
 Installed Homebrew `libpq` (18.4, matching the server; a client older
@@ -950,3 +948,55 @@ Also carried forward: the flat model namespacing deviation (CLAUDE.md
 specifies `app/models/{identity,telemetry,monitoring,cases,...}/`, and
 only `Monitoring::Signal` and the `Cases::*` models follow it, because
 those two were forced by constant collisions).
+
+
+### 2026-08-09 — everything runs in containers, and a boot bug that hid behind it
+
+**`bin/dev` failed hard**: `relation "solid_queue_processes" does not
+exist`.
+
+The queue database had all thirteen tables and `queue_structure.sql` was
+correct. The fault was configuration: `database.yml` declares a separate
+`queue` connection in every environment (HO §6.3), but Rails only
+generates `config.solid_queue.connects_to` for **production**, because a
+default app shares one database in development. So Solid Queue looked
+for its tables in the primary database and boot died.
+
+Worth noting how it survived this long: the test suite sets the `:test`
+job adapter, CI never boots a server, and the outbox specs assert on
+what was *enqueued* rather than on a running worker. Every green signal
+we had was structurally incapable of catching it. Now set in development
+and test — with only `connects_to` in test, since the suite drives the
+adapter itself.
+
+**The web/worker compose deviation is reversed.** The original argument
+was that native `bin/dev` is what we would actually use, so declaring
+compose services nobody runs would let them rot. That was backwards: not
+containerising the app meant its runtime environment was never exercised
+at all, which is exactly how the Solid Queue misconfiguration stayed
+invisible.
+
+Now `Dockerfile.dev` plus `web`, `worker` and a one-shot `migrate`
+service. Three details that matter:
+
+- **`migrate` is a separate service**, not web's entrypoint. Migrations
+  need `healthos_migrator`; the app runs as `healthos_app` and must not
+  have CREATE (ADR-002 4a). Folding them together would hand the
+  application the privileges the whole append-only scheme depends on it
+  lacking.
+- **The dev image installs `postgresql-client-18` from PGDG** and puts it
+  first on PATH. Debian's default client is older than the pinned
+  Postgres 18 and `pg_dump` refuses to run against a newer server — the
+  same trap CI hit, which would otherwise have been rediscovered inside
+  the container.
+- **The worker is not optional.** Without it the outbox dispatcher never
+  fires and every cross-step side effect (S2C-021) silently does nothing
+  while the app looks healthy. It is a first-class service, not a
+  convenience.
+
+Gems live in a named volume so host and container do not fight over
+architecture-specific builds, and `tmp`/`log` are volumes so container
+churn stays out of the working tree.
+
+`bin/dev --native` remains for debugger-heavy work, still against
+containerised dependencies.

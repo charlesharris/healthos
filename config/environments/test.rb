@@ -50,4 +50,19 @@ Rails.application.configure do
 
   # Raise error when a before_action's only/except options reference missing actions.
   config.action_controller.raise_on_missing_callback_actions = true
+
+  # Solid Queue runs on its own database in every environment, not just
+  # production (HO §6.3: "prefer a separate queue database/connection ... so
+  # queue churn does not contend unnecessarily with health-data tables").
+  #
+  # database.yml already declares the separate `queue` connection, but that
+  # alone is not enough — without connects_to, Solid Queue looks for its
+  # tables in the PRIMARY database and boot fails with
+  # `relation "solid_queue_processes" does not exist`. Rails only generates
+  # this line for production, because a default app shares one database in
+  # development.
+  # The adapter itself stays as RSpec sets it (:test in rails_helper) — this
+  # only tells Solid Queue which database its tables live in, for the specs
+  # that touch it directly.
+  config.solid_queue.connects_to = { database: { writing: :queue } }
 end

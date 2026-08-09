@@ -1,9 +1,17 @@
 # Local development dependencies (epic 001-01).
 #
+# Everything runs in containers: web, worker, postgres, object storage.
+#
 # Scope note: docs/implementation/prototype-scope.md sets deployment to
-# "local + CI only for now". This file is the development environment, not a
-# deployment reference — HO §6.6 (containerised web/workers, managed Postgres,
-# managed secrets) stays a target shape, not something we stand up yet.
+# "local + CI only for now", so this is the development environment rather
+# than a deployment reference. It does follow HO §6.6's shape — containerised
+# web and job workers against managed-style Postgres and object storage — so
+# standing up a real environment later is a configuration change rather than
+# a rewrite.
+#
+#   docker compose up            everything
+#   docker compose run --rm web bin/rails console
+#   docker compose exec web bin/test
 
 name: healthos
 
@@ -71,6 +79,93 @@ services:
       echo 'buckets ready (healthos-raw-payloads has object locking enabled)'
       "
 
+  # ---- Application ----------------------------------------------------
+  #
+  # Both app services share one image and one gem volume. The source is bind
+  # mounted, so an edit on the host is live in the container without a
+  # rebuild — the whole point of a separate dev image.
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    command: bin/rails server -b 0.0.0.0 -p 3000
+    ports:
+      - "${HEALTHOS_WEB_PORT:-3000}:3000"
+    volumes:
+      - .:/rails
+      # Named volumes over the bind mount, so host and container do not fight
+      # over gems built for different architectures, and so tmp/log churn
+      # stays out of the working tree.
+      - bundle_cache:/usr/local/bundle
+      - rails_tmp:/rails/tmp
+      - rails_log:/rails/log
+    environment: &app_env
+      RAILS_ENV: development
+      # Service names, not localhost: inside the network these resolve to the
+      # other containers.
+      HEALTHOS_DB_HOST: postgres
+      HEALTHOS_DB_PORT: 5432
+      HEALTHOS_DB_USER: healthos_app
+      HEALTHOS_DB_PASSWORD: healthos_dev_password
+      HEALTHOS_S3_ENDPOINT: http://minio:9000
+      HEALTHOS_S3_ACCESS_KEY: healthos
+      HEALTHOS_S3_SECRET_KEY: healthos_dev_password
+      HEALTHOS_RAW_BUCKET: healthos-raw-payloads
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    stdin_open: true
+    tty: true
+
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    # Solid Queue. Without a worker the outbox dispatcher never runs, so
+    # every cross-step side effect (S2C-021) would silently never happen —
+    # a web-only environment looks fine and quietly does nothing.
+    command: bin/jobs
+    volumes:
+      - .:/rails
+      - bundle_cache:/usr/local/bundle
+      - rails_tmp:/rails/tmp
+      - rails_log:/rails/log
+    environment: *app_env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+
+  # Runs once and exits. Migrations need the migrator role, which the app
+  # role deliberately is not (ADR-002 4a) — so this cannot be folded into
+  # web's startup without handing the app CREATE privileges.
+  migrate:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    command: >
+      sh -c "bin/rails db:prepare && bin/rails db:privileges:apply"
+    volumes:
+      - .:/rails
+      - bundle_cache:/usr/local/bundle
+      - rails_tmp:/rails/tmp
+      - rails_log:/rails/log
+    environment:
+      <<: *app_env
+      HEALTHOS_DB_USER: healthos_migrator
+    depends_on:
+      postgres:
+        condition: service_healthy
+
 volumes:
   postgres_data:
   minio_data:
+  bundle_cache:
+  rails_tmp:
+  rails_log:

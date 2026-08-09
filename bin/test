@@ -1,13 +1,23 @@
 #!/usr/bin/env bash
 # Run the test suite (HO §126).
 #
-# Prepares the test schema as healthos_migrator, then runs RSpec as
-# healthos_app. That split is deliberate: the suite must exercise the same
-# unprivileged role the application uses, so append-only enforcement is
-# verified continuously rather than assumed (ADR-002 Decision 4a-iv).
-
+# Prepares the schema as healthos_migrator, then runs RSpec as healthos_app.
+# That split is deliberate: the suite must exercise the same unprivileged role
+# the application uses, so append-only enforcement is verified continuously
+# rather than assumed (ADR-002 Decision 4a-iv).
+#
+#   bin/test                  host Ruby (fast, needs libpq + a running postgres)
+#   bin/test --docker         inside the container, matching CI
 set -euo pipefail
 cd "$(dirname "$0")/.."
+
+if [ "${1:-}" = "--docker" ]; then
+  shift
+  docker compose up -d postgres minio >/dev/null
+  docker compose run --rm -e RAILS_ENV=test -e HEALTHOS_DB_USER=healthos_migrator \
+    web bin/rails db:prepare
+  exec docker compose run --rm -e RAILS_ENV=test web bin/rspec "$@"
+fi
 
 if [ "${SKIP_DB_PREPARE:-}" != "1" ]; then
   HEALTHOS_DB_USER=healthos_migrator bin/rails db:test:prepare

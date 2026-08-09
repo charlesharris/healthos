@@ -1,21 +1,23 @@
 #!/usr/bin/env bash
-# Start the development server plus the Solid Queue worker (HO §126).
+# Start the development environment (HO §126).
 #
-# The worker runs alongside the web process because every cross-step side
-# effect in this system goes through the outbox and Active Job (S2C-021) —
-# a web-only dev environment would silently never dispatch them.
+# Containers are the default: web, worker, postgres and object storage all
+# run in Docker, so what you run locally matches what CI and any future
+# deployment run (HO §6.6). The worker is not optional — without it the
+# outbox dispatcher never fires, and every cross-step side effect (S2C-021)
+# silently does nothing while the app looks healthy.
+#
+#   bin/dev              containers (default)
+#   bin/dev --native     host Ruby against containerised postgres/minio
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-if ! docker compose ps --status running --services 2>/dev/null | grep -q postgres; then
-  echo "postgres is not running; starting Docker dependencies"
+if [ "${1:-}" = "--native" ]; then
+  # Escape hatch for debugger-heavy work. Dependencies still run in Docker.
   docker compose up -d postgres minio
+  trap 'kill 0' EXIT
+  bin/jobs &
+  exec bin/rails server
 fi
 
-if [ "${SKIP_WORKER:-}" = "1" ]; then
-  exec bin/rails server "$@"
-fi
-
-trap 'kill 0' EXIT
-bin/jobs &
-bin/rails server "$@"
+exec docker compose up "$@"
