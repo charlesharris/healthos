@@ -110,6 +110,33 @@ land), bulk clinical actions.
 
 ## Decision Log
 
+### 2026-08-09 — bin/smoke: CI now boots the application
+
+The Solid Queue bug deserves a post-mortem, because the interesting part
+is not the bug. `bin/dev` died on its first request with `relation
+"solid_queue_processes" does not exist` while CI was green — and CI was
+*right* to be green, in the sense that every check it ran passed. Lint,
+two security scans, digest verification, 500-odd specs and a production
+image build, and not one of them started the application. The gap was
+not a missing assertion; it was a missing category of assertion.
+
+`bin/smoke` boots the full compose stack and checks only things that
+require a running system: the web process answers, the stylesheet
+Propshaft resolves is actually served, sign-in works with the seeded
+credentials, the queue renders real seeded Cases, the recurring schedule
+is registered in the queue database, and a job enqueued on the web
+connection is executed by the separate worker process. Anything provable
+in a spec stays in a spec.
+
+Verified by discrimination rather than by passing: removing
+`config.solid_queue.connects_to` reproduces the original bug, and
+`bin/smoke` exits 1 naming both failing checks ("recurring schedule
+registered: unreachable", "the worker executes an enqueued job: no").
+Restoring the line returns it to green. That exercise also found a flaw
+in the script itself — `set -e` was aborting before the summary printed,
+which is exactly backwards when the thing being diagnosed is "why will
+this not boot".
+
 ### 2026-08-09 — 002-19 watch sweep, 002-25 §120 races
 
 **A watch that never fires is worse than no watch.** Quick Review could

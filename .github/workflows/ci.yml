@@ -168,7 +168,30 @@ jobs:
       - name: Concurrency loop (HO §120)
         env:
           CORRELATION_LOOP_RUNS: 20
-        run: bin/rspec spec/cases/correlation_concurrency_spec.rb
+        run: |
+          bin/rspec spec/cases/correlation_concurrency_spec.rb \
+                    spec/cases/resolution_signal_race_spec.rb \
+                    spec/cases/watch_evaluation_spec.rb
+
+  # Does the thing actually start?
+  #
+  # Added after Solid Queue was pointed at the wrong database and `bin/dev`
+  # died on its first request while CI was green. Every other job here — lint,
+  # two security scans, digest verification, 500 specs, a production image
+  # build — was structurally incapable of catching that, because not one of
+  # them booted the application. A green pipeline over an app that will not
+  # start is worse than a red one.
+  #
+  # Deliberately asserts only what requires a running system. Everything
+  # provable in a spec stays in a spec.
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Boot the stack and exercise it
+        run: bin/smoke --clean
 
   # The Dockerfile is not exercised by docker-compose in development (see the
   # epic 001-01 Decision Log), so build it here to stop it rotting.

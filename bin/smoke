@@ -1,0 +1,137 @@
+#!/usr/bin/env bash
+# Boot the whole stack in containers and prove it works end to end.
+#
+# This exists because of a specific failure. Solid Queue was pointed at the
+# wrong database in development, so `bin/dev` died on its first request with
+# `relation "solid_queue_processes" does not exist` — while CI was green.
+# Every check we had (lint, security scan, digest verification, 500 specs,
+# a production image build) was structurally incapable of catching it, because
+# not one of them started the application.
+#
+# So the rule here is: assert only things that require a running system.
+# Anything provable in a spec belongs in a spec.
+#
+#   bin/smoke            build if needed, run, leave the stack up
+#   bin/smoke --clean    tear the stack down afterwards (CI does this)
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+CLEAN=0
+[ "${1:-}" = "--clean" ] && CLEAN=1
+
+BASE="http://localhost:3000"
+DEMO_EMAIL="operator@demo.test"
+DEMO_PASSWORD="healthos-demo-password"
+COOKIES="$(mktemp)"
+FAILURES=0
+
+cleanup() {
+  rm -f "$COOKIES"
+  if [ "$CLEAN" = "1" ]; then
+    echo "--- container logs (web) ---"
+    docker compose logs --tail=40 web || true
+    echo "--- container logs (worker) ---"
+    docker compose logs --tail=40 worker || true
+    docker compose down -v >/dev/null 2>&1 || true
+  fi
+}
+trap cleanup EXIT
+
+check() {
+  local label="$1" actual="$2" expected="$3"
+  if [ "$actual" = "$expected" ]; then
+    printf '  ok    %-52s %s\n' "$label" "$actual"
+  else
+    printf '  FAIL  %-52s %s (expected %s)\n' "$label" "$actual" "$expected"
+    FAILURES=$((FAILURES + 1))
+  fi
+}
+
+echo "== Building and starting the stack =="
+docker compose build --quiet
+docker compose up -d
+
+echo
+echo "== Waiting for the web process to answer =="
+health=""
+for _ in $(seq 1 60); do
+  health="$(curl -s -o /dev/null -w '%{http_code}' "$BASE/up" 2>/dev/null || true)"
+  [ "$health" = "200" ] && break
+  sleep 3
+done
+check "GET /up" "$health" "200"
+
+# Everything below is pointless if the app never came up, and the failure
+# output is far more legible when it stops here.
+if [ "$health" != "200" ]; then
+  echo
+  echo "The application did not boot. Logs:"
+  docker compose logs --tail=60 web
+  exit 1
+fi
+
+echo
+echo "== Web =="
+check "GET /session/new (unauthenticated)" \
+  "$(curl -s -o /dev/null -w '%{http_code}' "$BASE/session/new")" "200"
+# Propshaft resolves the digest at render time, so a missing or unbuilt
+# stylesheet shows up as a 404 here and nowhere else.
+css_path="$(curl -s "$BASE/session/new" | grep -oE '/assets/application[^"]*\.css' | head -1)"
+check "stylesheet resolves and is served" \
+  "$(curl -s -o /dev/null -w '%{http_code}' "$BASE$css_path")" "200"
+check "queue redirects when signed out" \
+  "$(curl -s -o /dev/null -w '%{http_code}' "$BASE/ops/cases")" "302"
+
+echo
+echo "== Seeding and signing in =="
+docker compose exec -T web bin/rails demo:seed >/dev/null
+token="$(curl -s -c "$COOKIES" "$BASE/session/new" \
+  | grep -oE 'name="authenticity_token" value="[^"]+"' | head -1 | sed 's/.*value="//;s/"//')"
+check "POST /session" \
+  "$(curl -s -b "$COOKIES" -c "$COOKIES" -o /dev/null -w '%{http_code}' -X POST "$BASE/session" \
+      --data-urlencode "authenticity_token=$token" \
+      --data-urlencode "email_address=$DEMO_EMAIL" \
+      --data-urlencode "password=$DEMO_PASSWORD")" "302"
+check "GET /ops/cases (signed in)" \
+  "$(curl -s -b "$COOKIES" -o /dev/null -w '%{http_code}' "$BASE/ops/cases")" "200"
+check "GET /admin (signed in)" \
+  "$(curl -s -b "$COOKIES" -o /dev/null -w '%{http_code}' "$BASE/admin")" "200"
+
+# The queue must render actual seeded work. A 200 on an empty table would pass
+# every check above while proving nothing about the pipeline.
+check "the queue shows at least one Case" \
+  "$(curl -s -b "$COOKIES" "$BASE/ops/cases" | grep -c 'ops/cases/' > /dev/null && echo yes || echo no)" "yes"
+
+echo
+echo "== Background work =="
+# The recurring schedule is parsed by the supervisor at boot and written to
+# the queue database. A row here proves config/recurring.yml is valid AND that
+# the worker reached the queue database — the two halves of the original bug.
+check "recurring schedule registered" \
+  "$(docker compose exec -T web bin/rails runner \
+      'print SolidQueue::RecurringTask.exists?(key: "evaluate_watch_conditions")' \
+      2>/dev/null || echo unreachable)" "true"
+
+# And that a job actually round-trips: enqueued on the web connection, picked
+# up and executed by a separate worker process.
+# `|| true` throughout this section: under `set -e` a failing enqueue would
+# abort the script with a bare exit code, losing the summary — and the summary
+# is the whole point when the thing being diagnosed is "why won't it boot".
+docker compose exec -T web bin/rails runner \
+  'Cases::WatchEvaluationJob.perform_later' >/dev/null 2>&1 || true
+executed="no"
+for _ in $(seq 1 20); do
+  finished="$(docker compose exec -T web bin/rails runner \
+    'print SolidQueue::Job.where(class_name: "Cases::WatchEvaluationJob").where.not(finished_at: nil).count' \
+    2>/dev/null || echo 0)"
+  if [ "${finished:-0}" -gt 0 ]; then executed="yes"; break; fi
+  sleep 3
+done
+check "the worker executes an enqueued job" "$executed" "yes"
+
+echo
+if [ "$FAILURES" -gt 0 ]; then
+  echo "$FAILURES smoke check(s) failed."
+  exit 1
+fi
+echo "All smoke checks passed."
