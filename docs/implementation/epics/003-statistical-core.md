@@ -51,7 +51,7 @@ STAT-001, 004–009, 012–030, 036–042; S2C-018/019.
 
 ### Context (Milestone 6)
 - [ ] 003-02 ContextDefinition interface (§51) + versioning/digest
-- [ ] 003-03 `contexts` + `context_values` (row-per-dimension typed,
+- [x] 003-03 `contexts` + `context_values` (row-per-dimension typed,
       §52–53) with family metadata columns (semantic/source/derivation)
       (STAT-031)
 - [ ] 003-04 Context materializer with input EvidenceSet + fingerprint;
@@ -61,7 +61,7 @@ STAT-001, 004–009, 012–030, 036–042; S2C-018/019.
 ### Baseline (Milestone 6)
 - [ ] 003-06 BaselineDefinition config model (§56): eligibility,
       minimum/target units + span, exclusions, source compatibility
-- [ ] 003-07 `baseline_instances` with maturity, completeness,
+- [x] 003-07 `baseline_instances` with maturity, completeness,
       source_summary, evidence set (§57)
 - [ ] 003-08 `personal_recent` baseline v1 with generic minimums
       (10 usable days / 14-day span; targets 21/28) (STAT-016/017)
@@ -129,6 +129,51 @@ baseline types beyond personal_recent (phase/cycle/expected-trajectory
 land when a domain needs them — keep BaselineDefinition general).
 
 ## Decision Log
+
+### 2026-08-09 — 003-03/007 schema, and governed statistical config
+
+**Every Statistical Contract threshold now lives in
+`config/statistics/*.yml`**, read through `Analysis::StatisticalConfig`,
+with the contract's own wording quoted beside each number so a reviewer
+can check the transcription without opening SC. Nothing else in the
+codebase may hard-code one, and a spec greps the maturity resolver to
+prove it does not.
+
+The specs assert the config against **the contract's numbers**, not
+against whatever the file happens to contain. Editing a governed
+threshold therefore breaks the suite — which is the intent. STAT-044
+wants a version bump and human review, not a quiet edit that a green
+suite would bless.
+
+**A spec caught a shallow freeze.** `Hash#freeze` leaves nested hashes
+mutable, so any caller could have reached in and changed a threshold at
+runtime. A threshold mutable in-process is not governed, whatever the
+file says. Now deep-frozen.
+
+**Maturity takes the weaker of units and span** (SC §21). Ten readings
+crammed into three days is not a fortnight's baseline, and SC §21 stores
+both precisely so a burst of measurement cannot pass for sustained
+history.
+
+**An affected window has no maturity.** It either clears SC §23's
+minimum or the comparison is refused for insufficient longitudinal
+evidence (STAT-018) — giving it a maturity label would imply a spectrum
+where the contract has a threshold. A spec asserts the method does not
+exist.
+
+**The value-representation CHECK is repeated on `context_values`.** A
+dimension that could not be computed carries no value, so STAT-002 holds
+at the analytical layer rather than being assumed to survive from the
+telemetry layer.
+
+**Difference-family metadata sits on every context value** (SC §49–50),
+so STAT-033's correlated-family suppression is a filter rather than a
+join, and adding a family later needs no schema change.
+
+`config_digest` is exposed for inclusion in artifact version tuples
+(HO §80), so an artifact records which governed configuration produced
+it — a threshold change becomes visible in the artifact, not only in git
+history.
 
 ### 2026-08-09 — 003-01 simulation harness
 

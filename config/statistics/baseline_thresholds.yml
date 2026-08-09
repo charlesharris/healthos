@@ -1,0 +1,39 @@
+# GOVERNED STATISTICAL CONFIGURATION (STAT-044).
+#
+# These are the Statistical Contract's own numbers, transcribed. They are not
+# tuning parameters and must never be adjusted to make a spec pass — a change
+# here requires a version bump and human review.
+#
+# Quoted verbatim so a reviewer can check the transcription without opening
+# the contract:
+#
+#   SC §22: "minimum usable baseline days: 10 / target usable baseline days: 21
+#            minimum baseline calendar span: 14 days / target: 28 days"
+#           "These are engineering defaults only. A domain pack should replace
+#            them as soon as a clinically meaningful cadence is known."
+#
+#   SC §23: "minimum usable affected days: 5 / minimum affected calendar
+#            span: 7 days"
+#
+#   SC §24: "minimum prior comparable episodes: 3", with evidence maxima of
+#           3-4 → WEAK, 5-7 → MODERATE, 8+ → potentially STRONG.
+#
+# STAT-016/017/018 cite these directly.
+
+version: 1
+
+baseline:
+  minimum_usable_units: 10        # STAT-016
+  minimum_calendar_span_days: 14  # STAT-016
+  target_usable_units: 21         # STAT-017
+  target_calendar_span_days: 28   # STAT-017
+
+affected_window:
+  minimum_usable_units: 5         # STAT-018
+  minimum_calendar_span_days: 7   # STAT-018
+
+single_episode:
+  minimum_prior_episodes: 3
+  weak_range: [3, 4]
+  moderate_range: [5, 7]
+  strong_minimum: 8

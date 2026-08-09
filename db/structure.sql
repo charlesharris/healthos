@@ -47,6 +47,36 @@ CREATE TABLE public.audit_events (
 
 
 --
+-- Name: baseline_instances; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.baseline_instances (
+    id uuid DEFAULT uuidv7() NOT NULL,
+    organization_id uuid NOT NULL,
+    subject_id uuid NOT NULL,
+    case_id uuid,
+    definition_key text NOT NULL,
+    definition_version integer NOT NULL,
+    definition_digest text NOT NULL,
+    baseline_type text NOT NULL,
+    window_started_at timestamp(6) without time zone NOT NULL,
+    window_ended_at timestamp(6) without time zone NOT NULL,
+    as_of timestamp(6) without time zone NOT NULL,
+    usable_units integer DEFAULT 0 NOT NULL,
+    calendar_span_days integer DEFAULT 0 NOT NULL,
+    completeness numeric,
+    maturity text NOT NULL,
+    source_summary jsonb DEFAULT '{}'::jsonb NOT NULL,
+    evidence_set_id uuid,
+    version_tuple jsonb DEFAULT '{}'::jsonb NOT NULL,
+    fingerprint text NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT baseline_instances_maturity_check CHECK ((maturity = ANY (ARRAY['immature'::text, 'partial'::text, 'mature'::text])))
+);
+
+
+--
 -- Name: case_correlation_scopes; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -157,6 +187,62 @@ CREATE TABLE public.cases (
     CONSTRAINT cases_analysis_status_check CHECK ((analysis_status = ANY (ARRAY['not_started'::text, 'pending'::text, 'current'::text, 'stale'::text, 'failed'::text, 'insufficient_evidence'::text]))),
     CONSTRAINT cases_review_priority_check CHECK ((review_priority = ANY (ARRAY['now'::text, 'today'::text, 'routine'::text, 'watch'::text]))),
     CONSTRAINT cases_status_check CHECK ((status = ANY (ARRAY['new'::text, 'triaged'::text, 'investigating'::text, 'watching'::text, 'waiting_external'::text, 'resolved'::text, 'dismissed'::text])))
+);
+
+
+--
+-- Name: context_values; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.context_values (
+    id uuid DEFAULT uuidv7() NOT NULL,
+    organization_id uuid NOT NULL,
+    context_id uuid NOT NULL,
+    dimension_key text NOT NULL,
+    dimension_version integer NOT NULL,
+    value_numeric numeric,
+    value_text text,
+    value_boolean boolean,
+    value_json jsonb,
+    unit text,
+    window_started_at timestamp(6) without time zone,
+    window_ended_at timestamp(6) without time zone,
+    quality_state text DEFAULT 'observed'::text NOT NULL,
+    source_family text,
+    semantic_family text,
+    derivation_family text,
+    evidence_set_id uuid,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT context_values_value_representation_check CHECK (((quality_state = 'observed'::text) OR ((value_numeric IS NULL) AND (value_text IS NULL) AND (value_boolean IS NULL) AND (value_json IS NULL))))
+);
+
+
+--
+-- Name: contexts; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.contexts (
+    id uuid DEFAULT uuidv7() NOT NULL,
+    organization_id uuid NOT NULL,
+    subject_id uuid NOT NULL,
+    case_id uuid,
+    definition_key text NOT NULL,
+    definition_version integer NOT NULL,
+    definition_digest text NOT NULL,
+    anchor_type text NOT NULL,
+    anchor_id uuid,
+    window_started_at timestamp(6) without time zone NOT NULL,
+    window_ended_at timestamp(6) without time zone NOT NULL,
+    as_of timestamp(6) without time zone NOT NULL,
+    status text DEFAULT 'materialized'::text NOT NULL,
+    data_completeness numeric,
+    input_evidence_set_id uuid,
+    version_tuple jsonb DEFAULT '{}'::jsonb NOT NULL,
+    fingerprint text NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT contexts_status_check CHECK ((status = ANY (ARRAY['materialized'::text, 'insufficient_input'::text, 'failed'::text])))
 );
 
 
@@ -745,6 +831,14 @@ ALTER TABLE ONLY public.audit_events
 
 
 --
+-- Name: baseline_instances baseline_instances_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.baseline_instances
+    ADD CONSTRAINT baseline_instances_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: case_correlation_scopes case_correlation_scopes_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -782,6 +876,22 @@ ALTER TABLE ONLY public.case_signals
 
 ALTER TABLE ONLY public.cases
     ADD CONSTRAINT cases_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: context_values context_values_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.context_values
+    ADD CONSTRAINT context_values_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: contexts contexts_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.contexts
+    ADD CONSTRAINT contexts_pkey PRIMARY KEY (id);
 
 
 --
@@ -1051,6 +1161,48 @@ CREATE INDEX index_audit_events_on_type_and_time ON public.audit_events USING bt
 
 
 --
+-- Name: index_baseline_instances_identity; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_baseline_instances_identity ON public.baseline_instances USING btree (organization_id, subject_id, definition_key, definition_version, as_of, fingerprint);
+
+
+--
+-- Name: index_baseline_instances_on_case_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_baseline_instances_on_case_id ON public.baseline_instances USING btree (case_id);
+
+
+--
+-- Name: index_baseline_instances_on_evidence_set_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_baseline_instances_on_evidence_set_id ON public.baseline_instances USING btree (evidence_set_id);
+
+
+--
+-- Name: index_baseline_instances_on_org_subject_as_of; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_baseline_instances_on_org_subject_as_of ON public.baseline_instances USING btree (organization_id, subject_id, as_of);
+
+
+--
+-- Name: index_baseline_instances_on_organization_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_baseline_instances_on_organization_id ON public.baseline_instances USING btree (organization_id);
+
+
+--
+-- Name: index_baseline_instances_on_subject_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_baseline_instances_on_subject_id ON public.baseline_instances USING btree (subject_id);
+
+
+--
 -- Name: index_case_correlation_scopes_identity; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -1230,6 +1382,83 @@ CREATE INDEX index_cases_on_subject_id ON public.cases USING btree (subject_id);
 --
 
 CREATE INDEX index_cases_on_team_id ON public.cases USING btree (team_id);
+
+
+--
+-- Name: index_context_values_on_context_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_context_values_on_context_id ON public.context_values USING btree (context_id);
+
+
+--
+-- Name: index_context_values_on_evidence_set_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_context_values_on_evidence_set_id ON public.context_values USING btree (evidence_set_id);
+
+
+--
+-- Name: index_context_values_on_org_and_dimension; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_context_values_on_org_and_dimension ON public.context_values USING btree (organization_id, dimension_key);
+
+
+--
+-- Name: index_context_values_on_organization_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_context_values_on_organization_id ON public.context_values USING btree (organization_id);
+
+
+--
+-- Name: index_context_values_unique_per_context; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_context_values_unique_per_context ON public.context_values USING btree (context_id, dimension_key);
+
+
+--
+-- Name: index_contexts_identity; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_contexts_identity ON public.contexts USING btree (organization_id, subject_id, definition_key, definition_version, as_of, fingerprint);
+
+
+--
+-- Name: index_contexts_on_case_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_contexts_on_case_id ON public.contexts USING btree (case_id);
+
+
+--
+-- Name: index_contexts_on_input_evidence_set_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_contexts_on_input_evidence_set_id ON public.contexts USING btree (input_evidence_set_id);
+
+
+--
+-- Name: index_contexts_on_org_subject_as_of; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_contexts_on_org_subject_as_of ON public.contexts USING btree (organization_id, subject_id, as_of);
+
+
+--
+-- Name: index_contexts_on_organization_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_contexts_on_organization_id ON public.contexts USING btree (organization_id);
+
+
+--
+-- Name: index_contexts_on_subject_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_contexts_on_subject_id ON public.contexts USING btree (subject_id);
 
 
 --
@@ -2059,6 +2288,22 @@ ALTER TABLE ONLY public.invitations
 
 
 --
+-- Name: context_values fk_rails_11c7f39e08; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.context_values
+    ADD CONSTRAINT fk_rails_11c7f39e08 FOREIGN KEY (context_id) REFERENCES public.contexts(id);
+
+
+--
+-- Name: context_values fk_rails_14e4b8f7ac; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.context_values
+    ADD CONSTRAINT fk_rails_14e4b8f7ac FOREIGN KEY (organization_id) REFERENCES public.organizations(id);
+
+
+--
 -- Name: events fk_rails_163b5130b5; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -2096,6 +2341,14 @@ ALTER TABLE ONLY public.events
 
 ALTER TABLE ONLY public.events
     ADD CONSTRAINT fk_rails_201ad5ebff FOREIGN KEY (source_id) REFERENCES public.sources(id);
+
+
+--
+-- Name: baseline_instances fk_rails_207fba98b1; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.baseline_instances
+    ADD CONSTRAINT fk_rails_207fba98b1 FOREIGN KEY (organization_id) REFERENCES public.organizations(id);
 
 
 --
@@ -2211,6 +2464,22 @@ ALTER TABLE ONLY public.monitor_configurations
 
 
 --
+-- Name: contexts fk_rails_5f76399662; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.contexts
+    ADD CONSTRAINT fk_rails_5f76399662 FOREIGN KEY (case_id) REFERENCES public.cases(id);
+
+
+--
+-- Name: context_values fk_rails_5f8af61c89; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.context_values
+    ADD CONSTRAINT fk_rails_5f8af61c89 FOREIGN KEY (evidence_set_id) REFERENCES public.evidence_sets(id);
+
+
+--
 -- Name: monitor_evaluations fk_rails_60bb870f93; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -2315,11 +2584,27 @@ ALTER TABLE ONLY public.sessions
 
 
 --
+-- Name: baseline_instances fk_rails_77f447cee4; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.baseline_instances
+    ADD CONSTRAINT fk_rails_77f447cee4 FOREIGN KEY (subject_id) REFERENCES public.subjects(id);
+
+
+--
 -- Name: case_signals fk_rails_7aeeb938f9; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.case_signals
     ADD CONSTRAINT fk_rails_7aeeb938f9 FOREIGN KEY (signal_id) REFERENCES public.signals(id);
+
+
+--
+-- Name: baseline_instances fk_rails_7c99e192be; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.baseline_instances
+    ADD CONSTRAINT fk_rails_7c99e192be FOREIGN KEY (evidence_set_id) REFERENCES public.evidence_sets(id);
 
 
 --
@@ -2360,6 +2645,14 @@ ALTER TABLE ONLY public.domain_events
 
 ALTER TABLE ONLY public.watch_conditions
     ADD CONSTRAINT fk_rails_8c8e83d5d7 FOREIGN KEY (case_id) REFERENCES public.cases(id);
+
+
+--
+-- Name: contexts fk_rails_8e9711c31f; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.contexts
+    ADD CONSTRAINT fk_rails_8e9711c31f FOREIGN KEY (organization_id) REFERENCES public.organizations(id);
 
 
 --
@@ -2435,6 +2728,14 @@ ALTER TABLE ONLY public.derived_signals
 
 
 --
+-- Name: contexts fk_rails_b337137ed5; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.contexts
+    ADD CONSTRAINT fk_rails_b337137ed5 FOREIGN KEY (input_evidence_set_id) REFERENCES public.evidence_sets(id);
+
+
+--
 -- Name: intervals fk_rails_b44d37140b; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -2456,6 +2757,14 @@ ALTER TABLE ONLY public.observations
 
 ALTER TABLE ONLY public.subject_identities
     ADD CONSTRAINT fk_rails_b620b4b32c FOREIGN KEY (organization_id) REFERENCES public.organizations(id);
+
+
+--
+-- Name: contexts fk_rails_bc8ff86ec1; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.contexts
+    ADD CONSTRAINT fk_rails_bc8ff86ec1 FOREIGN KEY (subject_id) REFERENCES public.subjects(id);
 
 
 --
@@ -2555,6 +2864,14 @@ ALTER TABLE ONLY public.devices
 
 
 --
+-- Name: baseline_instances fk_rails_e72cd0665b; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.baseline_instances
+    ADD CONSTRAINT fk_rails_e72cd0665b FOREIGN KEY (case_id) REFERENCES public.cases(id);
+
+
+--
 -- Name: case_correlation_scopes fk_rails_e7c8800882; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -2641,6 +2958,7 @@ ALTER TABLE ONLY public.intervals
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20260809180000'),
 ('20260809160000'),
 ('20260809140000'),
 ('20260809130000'),
