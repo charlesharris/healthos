@@ -58,7 +58,7 @@ module Identity
         subject = Subject.create!(organization: organization, timezone: timezone)
         SubjectIdentifier.create!(
           organization: organization, subject: subject,
-          system: system, value: value, source_id: source&.id
+          system: system, value: value, source: source
         )
       end
 

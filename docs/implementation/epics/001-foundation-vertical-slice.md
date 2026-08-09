@@ -80,15 +80,15 @@ semantics in Epic 002); provenance invariants 1–3.
       subject idempotently
 
 ### 001-05 Sources + RawEnvelope + object storage
-- [ ] `sources` (encrypted configuration, status, last_success/failure)
-- [ ] `raw_envelopes` per §13.1: unique
+- [x] `sources` (encrypted configuration, status, last_success/failure)
+- [x] `raw_envelopes` per §13.1: unique
       (org, source, source_record_id, source_record_version);
       content_hash; payload in object storage, key+hash in DB
-- [ ] Append-only enforced (no update/destroy paths; DB trigger or
-      readonly? — prefer service-layer + spec; record decision below)
-- [ ] Ingestion contract: authenticate source → identity/hash → insert
+- [x] Append-only enforced by privilege revocation (ADR-002 D5) plus
+      `readonly?`; both asserted by spec
+- [x] Ingestion contract: authenticate source → identity/hash → insert
       if new → enqueue normalization via outbox
-- [ ] Spec: same record POSTed twice → one RawEnvelope, one
+- [x] Spec: same record POSTed twice → one RawEnvelope, one
       normalization enqueue (S2C-020; §14)
 
 ### 001-06 Semantic registry v0
@@ -555,3 +555,51 @@ to the previous day in New York.
 
 `subject_identifiers.source_id` exists but its association is commented
 out until `Source` arrives in 001-05.
+
+### 2026-08-09 — 001-05 sources, raw envelopes, object storage
+
+**`NULLS NOT DISTINCT` on the identity index.** HO §13.1's unique key
+includes `source_record_version`, which is nullable. PostgreSQL treats
+NULLs as distinct in a unique index by default, so a versionless record
+would have inserted on every retry — idempotency silently absent for
+exactly the sources HO §13.1 warns about ("when a source lacks
+versions"). Specced directly.
+
+**Payload written to object storage before the row is inserted.** If the
+insert then loses the idempotency race we get an orphaned object rather
+than a row pointing at bytes that were never stored. Content-addressed
+keys make the orphan harmless: identical bytes always land on the same
+key, so the winning row already references it. That also means two
+envelopes citing the same payload share one object, which is specced.
+
+**Content hashes are verified on read, not merely written.** A hash that
+is never checked proves nothing. `RawEnvelope#payload` re-hashes and
+raises on mismatch, so a provenance drilldown surfaces altered evidence
+as an error rather than as plausible-looking bytes (INV-4, INV-5,
+HO §131).
+
+**Object locking is verified against real MinIO**, not a double.
+`spec/storage/raw_payload_store_spec.rb` asserts
+`object_lock_enabled == "Enabled"`. Object lock can only be set at
+bucket creation, so a mistake is unrecoverable without recreating the
+bucket — worth catching now rather than at pilot. The spec skips with an
+explicit message when MinIO is not running, and CI does not run MinIO
+today, so this is a local and pre-deploy check. **If it begins skipping
+everywhere, the WORM guarantee is unverified.**
+
+**First table where append-only is proven end to end.** The specs assert
+`ReadOnlyRecord` from ActiveRecord *and* `permission denied` from
+PostgreSQL for both UPDATE and DELETE — the belt and the braces
+separately.
+
+Ingestion follows HO §14's order exactly, and the envelope row commits
+in the same transaction as its outbox event (HO §48), so normalization
+can never be enqueued for evidence that rolled back.
+
+Restored the `SubjectIdentifier#source` association that 001-04 left
+commented out.
+
+**Also fixed:** the 001-04 encryption initializer raised outside
+dev/test, which broke `assets:precompile` in the Docker image build
+(tests were green; `build_image` caught it). It now honours
+`SECRET_KEY_BASE_DUMMY`, the signal Rails uses for that build context.

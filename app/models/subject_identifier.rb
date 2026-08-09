@@ -10,9 +10,7 @@
 class SubjectIdentifier < ApplicationRecord
   belongs_to :organization
   belongs_to :subject
-  # The source_id column exists now so identifiers can record where they came
-  # from, but the Source model arrives in 001-05. Declared then.
-  # belongs_to :source, optional: true
+  belongs_to :source, optional: true
 
   validates :system, :value, presence: true
   validates :value, uniqueness: { scope: %i[organization_id system] }

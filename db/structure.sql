@@ -121,6 +121,33 @@ CREATE TABLE public.organizations (
 
 
 --
+-- Name: raw_envelopes; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.raw_envelopes (
+    id uuid DEFAULT uuidv7() NOT NULL,
+    public_id text NOT NULL,
+    organization_id uuid NOT NULL,
+    subject_id uuid,
+    source_id uuid NOT NULL,
+    source_record_id text NOT NULL,
+    source_record_version text,
+    content_type text NOT NULL,
+    object_key text NOT NULL,
+    content_hash text NOT NULL,
+    observed_at timestamp(6) without time zone,
+    source_modified_at timestamp(6) without time zone,
+    received_at timestamp(6) without time zone NOT NULL,
+    ingested_at timestamp(6) without time zone,
+    adapter_key text NOT NULL,
+    adapter_version text NOT NULL,
+    metadata jsonb DEFAULT '{}'::jsonb NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL
+);
+
+
+--
 -- Name: schema_migrations; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -140,6 +167,28 @@ CREATE TABLE public.sessions (
     user_agent text,
     created_at timestamp(6) without time zone NOT NULL,
     updated_at timestamp(6) without time zone NOT NULL
+);
+
+
+--
+-- Name: sources; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.sources (
+    id uuid DEFAULT uuidv7() NOT NULL,
+    organization_id uuid NOT NULL,
+    key text NOT NULL,
+    source_type text NOT NULL,
+    display_name text NOT NULL,
+    status text DEFAULT 'active'::text NOT NULL,
+    configuration_encrypted text,
+    last_success_at timestamp(6) without time zone,
+    last_failure_at timestamp(6) without time zone,
+    last_failure_reason text,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT sources_source_type_check CHECK ((source_type = ANY (ARRAY['synthetic'::text, 'csv_import'::text, 'customer_api'::text, 'fhir'::text, 'device_cloud'::text, 'rpm_vendor'::text, 'manual'::text]))),
+    CONSTRAINT sources_status_check CHECK ((status = ANY (ARRAY['active'::text, 'paused'::text, 'disabled'::text])))
 );
 
 
@@ -306,6 +355,14 @@ ALTER TABLE ONLY public.organizations
 
 
 --
+-- Name: raw_envelopes raw_envelopes_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.raw_envelopes
+    ADD CONSTRAINT raw_envelopes_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: schema_migrations schema_migrations_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -319,6 +376,14 @@ ALTER TABLE ONLY public.schema_migrations
 
 ALTER TABLE ONLY public.sessions
     ADD CONSTRAINT sessions_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: sources sources_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.sources
+    ADD CONSTRAINT sources_pkey PRIMARY KEY (id);
 
 
 --
@@ -518,10 +583,80 @@ CREATE UNIQUE INDEX index_organizations_on_slug ON public.organizations USING bt
 
 
 --
+-- Name: index_raw_envelopes_identity; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_raw_envelopes_identity ON public.raw_envelopes USING btree (organization_id, source_id, source_record_id, source_record_version) NULLS NOT DISTINCT;
+
+
+--
+-- Name: index_raw_envelopes_on_org_subject_time; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_raw_envelopes_on_org_subject_time ON public.raw_envelopes USING btree (organization_id, subject_id, observed_at);
+
+
+--
+-- Name: index_raw_envelopes_on_organization_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_raw_envelopes_on_organization_id ON public.raw_envelopes USING btree (organization_id);
+
+
+--
+-- Name: index_raw_envelopes_on_organization_id_and_public_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_raw_envelopes_on_organization_id_and_public_id ON public.raw_envelopes USING btree (organization_id, public_id);
+
+
+--
+-- Name: index_raw_envelopes_on_organization_id_and_received_at; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_raw_envelopes_on_organization_id_and_received_at ON public.raw_envelopes USING btree (organization_id, received_at);
+
+
+--
+-- Name: index_raw_envelopes_on_source_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_raw_envelopes_on_source_id ON public.raw_envelopes USING btree (source_id);
+
+
+--
+-- Name: index_raw_envelopes_on_subject_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_raw_envelopes_on_subject_id ON public.raw_envelopes USING btree (subject_id);
+
+
+--
 -- Name: index_sessions_on_user_id; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX index_sessions_on_user_id ON public.sessions USING btree (user_id);
+
+
+--
+-- Name: index_sources_on_organization_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_sources_on_organization_id ON public.sources USING btree (organization_id);
+
+
+--
+-- Name: index_sources_on_organization_id_and_key; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_sources_on_organization_id_and_key ON public.sources USING btree (organization_id, key);
+
+
+--
+-- Name: index_sources_on_organization_id_and_status; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_sources_on_organization_id_and_status ON public.sources USING btree (organization_id, status);
 
 
 --
@@ -666,6 +801,14 @@ ALTER TABLE ONLY public.subject_identifiers
 
 
 --
+-- Name: raw_envelopes fk_rails_04cab64491; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.raw_envelopes
+    ADD CONSTRAINT fk_rails_04cab64491 FOREIGN KEY (organization_id) REFERENCES public.organizations(id);
+
+
+--
 -- Name: invitations fk_rails_0fe4c14f0e; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -698,6 +841,14 @@ ALTER TABLE ONLY public.audit_events
 
 
 --
+-- Name: sources fk_rails_4b1bec7af5; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.sources
+    ADD CONSTRAINT fk_rails_4b1bec7af5 FOREIGN KEY (organization_id) REFERENCES public.organizations(id);
+
+
+--
 -- Name: organization_memberships fk_rails_57cf70d280; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -714,6 +865,14 @@ ALTER TABLE ONLY public.team_memberships
 
 
 --
+-- Name: raw_envelopes fk_rails_6b257aa36a; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.raw_envelopes
+    ADD CONSTRAINT fk_rails_6b257aa36a FOREIGN KEY (subject_id) REFERENCES public.subjects(id);
+
+
+--
 -- Name: team_memberships fk_rails_6dfe318707; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -727,6 +886,14 @@ ALTER TABLE ONLY public.team_memberships
 
 ALTER TABLE ONLY public.organization_memberships
     ADD CONSTRAINT fk_rails_715ab7f4fe FOREIGN KEY (organization_id) REFERENCES public.organizations(id);
+
+
+--
+-- Name: raw_envelopes fk_rails_745563aca1; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.raw_envelopes
+    ADD CONSTRAINT fk_rails_745563aca1 FOREIGN KEY (source_id) REFERENCES public.sources(id);
 
 
 --
@@ -832,6 +999,8 @@ ALTER TABLE ONLY public.team_memberships
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20260809100100'),
+('20260809100000'),
 ('20260809090200'),
 ('20260809090100'),
 ('20260809090000'),

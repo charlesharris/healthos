@@ -24,6 +24,7 @@ module Outbox
   # error instead of an event nothing is listening for. Names follow the
   # HO §49 examples.
   EVENT_TYPES = %w[
+    ingestion.envelope_received
     telemetry.observation_created
     monitoring.signal_created
     cases.case_created
