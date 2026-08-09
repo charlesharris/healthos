@@ -379,3 +379,32 @@ in a nested transaction so one poisoned event does not roll back its
 peers, and events stop being selected after `MAX_ATTEMPTS` rather than
 starving newer ones. Dead events are retained, never deleted, so support
 can still see them (HO §157).
+
+### 2026-08-09 — CI schema drift was a toolchain mismatch
+
+Second CI failure on "Check schema is up to date", this time genuine
+drift — but not in the schema. Every hunk was a CHECK constraint
+rendered two ways:
+
+```
+(ARRAY['active'::character varying, ...])::text[]      # local, pg_dump 18.4
+ARRAY[('active'::character varying)::text, ...]        # CI
+```
+
+Cause: the step named "Install PostgreSQL 18 client" installed the
+package but did not put it on PATH. The runner image already ships
+`postgresql-client-16`, which stayed ahead of it, so `pg_dump --version`
+reported 16.14 throughout — the step had been passing while doing
+nothing useful. Two clients, two renderings, phantom drift.
+
+Fixed by prepending `/usr/lib/postgresql/18/bin` to `GITHUB_PATH`, plus
+a step that asserts the major version and fails loudly. A step that
+silently does nothing is worse than one that is missing, because it
+reads as covered.
+
+**Also: `postgres:18-alpine` was a floating tag**, which CLAUDE.md's
+stack section forbids ("pinned — do not float or substitute"). Both
+compose and CI now pin `postgres:18.4-alpine`. This was not the cause
+here — both happened to resolve to 18.4 — but it is the same class of
+problem and would eventually have produced drift that looked like a
+code change.

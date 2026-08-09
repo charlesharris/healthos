@@ -12,7 +12,7 @@ services:
     # PostgreSQL 18 for native uuidv7(). ADR-002 Decision 3b wants time-ordered
     # primary keys; 18 provides them in-database, so raw SQL insert paths
     # (imports, backfills) get them too rather than only ActiveRecord paths.
-    image: postgres:18-alpine
+    image: postgres:18.4-alpine
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres

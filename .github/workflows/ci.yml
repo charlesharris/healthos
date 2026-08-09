@@ -72,7 +72,7 @@ jobs:
       postgres:
         # Must match the development server version: ADR-002 Decision 3b
         # depends on native uuidv7(), which arrived in PostgreSQL 18.
-        image: postgres:18-alpine
+        image: postgres:18.4-alpine
         env:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
@@ -108,7 +108,18 @@ jobs:
             | sudo tee /etc/apt/sources.list.d/pgdg.list
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends postgresql-client-18
+          # The runner image already ships postgresql-client-16, which stays
+          # ahead of the new package on PATH. Installing 18 is not enough —
+          # its bin directory has to come first, or pg_dump silently stays on
+          # 16 and renders CHECK constraints differently from the developer
+          # machine, producing phantom schema drift.
+          echo "/usr/lib/postgresql/18/bin" >> "$GITHUB_PATH"
+
+      - name: Verify pg_dump major version matches the server
+        run: |
           pg_dump --version
+          pg_dump --version | grep -qE '\(PostgreSQL\) 18\.' \
+            || { echo "::error::pg_dump is not version 18; structure.sql would drift"; exit 1; }
 
       - name: Set up Ruby
         uses: ruby/setup-ruby@v1
