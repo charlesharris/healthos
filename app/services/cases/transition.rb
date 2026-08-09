@@ -64,6 +64,17 @@ module Cases
           payload: { "from" => from, "to" => @to }.merge(@payload)
         )
 
+        # Audited here rather than in the controller: S2C-013 already routes
+        # every state change through this object, so auditing here means a
+        # caller cannot forget. HO §157 requires the trail to be complete, not
+        # merely conventional.
+        Audit.record!(:case_state_changed, case_record: @case_record, actor: @actor,
+                      metadata: { "from" => from, "to" => @to })
+        if closing?
+          Audit.record!(:disposition_entered, case_record: @case_record, actor: @actor,
+                        metadata: { "code" => @disposition.fetch(:code) })
+        end
+
         publish_if_closing
       end
 

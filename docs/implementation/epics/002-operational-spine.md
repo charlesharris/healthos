@@ -61,17 +61,17 @@ Epic 003); S2C-004→017, S2C-023, S2C-025.
       parameters) (§31)
 
 ### Case model completion (Milestone 4)
-- [ ] 002-12 Case types `monitoring_interruption`, `care_gap`;
+- [x] 002-12 Case types `monitoring_interruption`, `care_gap`;
       correlation compatibility rules per §42, in the domain pack
       (S2C-025)
-- [ ] 002-13 Contextual attachment: source-change Signal attaches to an
+- [x] 002-13 Contextual attachment: source-change Signal attaches to an
       active blood_pressure_change Case when it explains the same work
-- [ ] 002-14 Reopen logic with domain reopen horizon; history retained
+- [x] 002-14 Reopen logic with domain reopen horizon; history retained
       (S2C-016/017); spec: outside horizon → new Case
-- [ ] 002-15 Correlation explanation persisted per attachment (§158)
+- [x] 002-15 Correlation explanation persisted per attachment (§158)
 - [x] 002-16 Priority policy + `priority_reasons` (now/today/routine/
       watch); explanation surface (§43, §159, S2C-011/012)
-- [ ] 002-17 Deterministic routing policy (team/owner) (§44)
+- [x] 002-17 Deterministic routing policy (team/owner) (§44)
 
 ### Lifecycle + queue (Milestone 5)
 - [x] 002-18 `Cases::Transition` with an explicit legality table;
@@ -84,7 +84,7 @@ Epic 003); S2C-004→017, S2C-023, S2C-025.
       detected_at), assignment, pagination, Turbo row refresh (§85–87)
 - [ ] 002-22 Quick Review shell: why-is-this-here, trigger Signals,
       timeline, owner, actions, disposition controls (§88)
-- [ ] 002-23 Case timeline query object merging observations/events/
+- [x] 002-23 Case timeline query object merging observations/events/
       signals/case_events (§90)
 - [~] 002-24 `audit_events` for view/assign/state/disposition (§92)
       — table created early alongside the admin UI (see epic 001 Decision
@@ -109,6 +109,44 @@ land), bulk clinical actions.
       under concurrency, no hidden source changes
 
 ## Decision Log
+
+### 2026-08-09 — 002-12..15, 002-17, 002-23, 002-24
+
+002-12 through 002-15 were already satisfied by the 001-11 correlation
+work (case types, contextual attachment, reopen horizon, persisted
+explanations) — verified against their specs rather than re-implemented.
+
+**Routing assigns a TEAM, never a person.** Auto-assigning an owner
+looks helpful and is not: it manufactures the appearance of ownership
+without anyone accepting it, and work that is nominally owned is easier
+to overlook than work that is visibly unassigned. Routing also never
+overrides a human — re-routing work an operator has claimed is how a
+queue loses people's trust.
+
+**An unroutable Case stays visible and says why.** A missing configured
+team leaves the Case unassigned with a `team_missing` reason, rather
+than silently falling through to some default team where nobody is
+looking for it.
+
+**System routing writes NO audit row, deliberately.** HO §92 is a
+*provider access* audit — "who looked at what" — and every row names an
+accountable person, which is why `actor_id` is NOT NULL. Automatic
+routing has no person, and relaxing the column to admit one system row
+would weaken the guarantee for every other row in the table. The
+assignment is still recorded as workflow history on the CaseEvent, which
+is where it belongs.
+
+**CaseEvent and AuditEvent are kept apart on purpose.** CaseEvent is
+product — an operator reads it. AuditEvent is compliance — it is not
+rendered anywhere. The clearest illustration: *viewing* a Case writes an
+audit row and no case event, because a timeline filling with "Dr X
+looked at this" would drown the workflow history it exists to show, and
+would leak who is reviewing whom to everyone with queue access.
+
+**Auditing lives in the transition service, not the controller.**
+S2C-013 already routes every state change through `Cases::Transition`,
+so auditing there means a caller cannot forget. HO §157 wants the trail
+complete, not merely conventional.
 
 ### 2026-08-09 — one window convention: half-open, day-aligned
 
