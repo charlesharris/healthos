@@ -119,11 +119,11 @@ semantics in Epic 002); provenance invariants 1–3.
       populated; invariants 1–3)
 
 ### 001-09 Daily BP derived summary
-- [ ] `derived_signals` table per §26 with algorithm key/version/digest
+- [x] `derived_signals` table per §26 with algorithm key/version/digest
       and `evidence_set_id`
-- [ ] `evidence_sets` / `evidence_items` generic tables (§22)
-- [ ] Daily BP summary algorithm v1 with input lineage recorded
-- [ ] Spec: recompute with same inputs → same identity, no duplicate;
+- [x] `evidence_sets` / `evidence_items` generic tables (§22)
+- [x] Daily BP summary algorithm v1 with input lineage recorded
+- [x] Spec: recompute with same inputs → same identity, no duplicate;
       lineage resolves to exact input observations
 
 ### 001-10 One trajectory monitor → Signal
@@ -749,3 +749,51 @@ An adapter-key mismatch (`synthetic_json` in the ingestion default
 versus `synthetic_bp_json` in the normalizer) failed 16 specs at once —
 worth noting only because it is the kind of thing that would have been
 a silent no-op had the registry defaulted instead of raising.
+
+### 2026-08-09 — 001-09 derived signals and evidence sets
+
+**`derived_signals` is the table that replaces a continuous aggregate**,
+and the concrete reason ADR-001 rejects Timescale rather than merely
+deferring it. Every row names the algorithm key, version and digest that
+produced it and points at the exact inputs it consumed. A Timescale
+continuous aggregate is mutable and carries none of that, so it cannot
+satisfy INV-3 or be pinned by a saved Investigation.
+
+**Median, not mean.** SC §29 prefers robust continuous summaries, and a
+single mis-cuffed reading of 220 would drag a mean far enough to look
+like a genuine trajectory shift. The semantic definition already
+declares `aggregation: median`, so algorithm and registry agree rather
+than drifting.
+
+**Lineage records what produced the value; the denominator records what
+was considered.** A day with one usable reading and one
+`device_not_reporting` has an evidence set of one and a denominator of
+`{usable: 1, raw: 2}`. Conflating those would misrepresent the
+evidence — either by implying the gap contributed, or by hiding that it
+existed. Both directions specced.
+
+**`MINIMUM_READINGS` is deliberately not a statistical gate.** It is 1,
+and exists only so an empty day yields `insufficient_input` rather than
+a null-valued row. Deciding whether a day's readings are *enough* is the
+evidence gate's job in epic 003; putting that decision inside a
+derivation would hide a gate where nobody would look for it. Flagged
+NON-CLINICAL and included in the algorithm digest.
+
+**The value-representation CHECK repeats at the derived layer.** A
+non-`computed` signal cannot carry a value, so "zero readings, therefore
+zero mmHg" is unrepresentable — STAT-002 enforced twice, once per layer,
+rather than assumed to hold downstream.
+
+**Windows are the subject's local day.** Specced with a reading at
+2026-03-16 01:00 UTC belonging to 2026-03-15 in New York, and another at
+05:00 UTC correctly excluded. Completeness denominators are day-based
+(SC §13–14), so a UTC window would silently misattribute readings.
+
+**`EvidenceItem` restricts `record_type` to canonical evidence classes.**
+An unconstrained polymorphic column would let anything in, and INV-4's
+"drill down to source records" would stop meaning anything specific.
+
+Zeitwerk: domain pack subdirectories are HO §24 organizational
+categories, not namespaces, so `app/domain_packs/*/*` is collapsed —
+`Hypertension::DailyBloodPressureSummary`, not
+`Hypertension::DerivedSignals::DailyBloodPressureSummary`.

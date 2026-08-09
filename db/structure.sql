@@ -47,6 +47,39 @@ CREATE TABLE public.audit_events (
 
 
 --
+-- Name: derived_signals; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.derived_signals (
+    id uuid DEFAULT uuidv7() NOT NULL,
+    organization_id uuid NOT NULL,
+    subject_id uuid NOT NULL,
+    semantic_key text NOT NULL,
+    semantic_version integer NOT NULL,
+    window_started_at timestamp(6) without time zone NOT NULL,
+    window_ended_at timestamp(6) without time zone NOT NULL,
+    value_numeric numeric,
+    value_text text,
+    value_json jsonb,
+    unit text,
+    algorithm_key text NOT NULL,
+    algorithm_version integer NOT NULL,
+    algorithm_digest text NOT NULL,
+    evidence_set_id uuid,
+    usable_input_count integer DEFAULT 0 NOT NULL,
+    raw_input_count integer DEFAULT 0 NOT NULL,
+    status text DEFAULT 'computed'::text NOT NULL,
+    computed_at timestamp(6) without time zone NOT NULL,
+    as_of timestamp(6) without time zone NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT derived_signals_status_check CHECK ((status = ANY (ARRAY['computed'::text, 'insufficient_input'::text, 'superseded'::text, 'failed'::text]))),
+    CONSTRAINT derived_signals_value_representation_check CHECK ((((status = 'computed'::text) AND ((value_numeric IS NOT NULL) OR (value_text IS NOT NULL) OR (value_json IS NOT NULL))) OR ((status <> 'computed'::text) AND (value_numeric IS NULL) AND (value_text IS NULL)))),
+    CONSTRAINT derived_signals_window_order_check CHECK ((window_ended_at >= window_started_at))
+);
+
+
+--
 -- Name: devices; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -110,6 +143,39 @@ CREATE TABLE public.events (
     normalizer_version integer NOT NULL,
     created_at timestamp(6) without time zone NOT NULL,
     updated_at timestamp(6) without time zone NOT NULL
+);
+
+
+--
+-- Name: evidence_items; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.evidence_items (
+    id uuid DEFAULT uuidv7() NOT NULL,
+    evidence_set_id uuid NOT NULL,
+    organization_id uuid NOT NULL,
+    record_type text NOT NULL,
+    record_id uuid NOT NULL,
+    role text DEFAULT 'input'::text NOT NULL,
+    ordinal integer,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL
+);
+
+
+--
+-- Name: evidence_sets; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.evidence_sets (
+    id uuid DEFAULT uuidv7() NOT NULL,
+    organization_id uuid NOT NULL,
+    purpose text NOT NULL,
+    as_of timestamp(6) without time zone NOT NULL,
+    fingerprint text NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT evidence_sets_purpose_check CHECK ((purpose = ANY (ARRAY['derived_signal_inputs'::text, 'context_inputs'::text, 'baseline_inputs'::text, 'comparison_affected_inputs'::text, 'comparison_baseline_inputs'::text, 'investigation_snapshot'::text])))
 );
 
 
@@ -453,6 +519,14 @@ ALTER TABLE ONLY public.audit_events
 
 
 --
+-- Name: derived_signals derived_signals_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.derived_signals
+    ADD CONSTRAINT derived_signals_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: devices devices_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -474,6 +548,22 @@ ALTER TABLE ONLY public.domain_events
 
 ALTER TABLE ONLY public.events
     ADD CONSTRAINT events_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: evidence_items evidence_items_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.evidence_items
+    ADD CONSTRAINT evidence_items_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: evidence_sets evidence_sets_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.evidence_sets
+    ADD CONSTRAINT evidence_sets_pkey PRIMARY KEY (id);
 
 
 --
@@ -655,6 +745,41 @@ CREATE INDEX index_audit_events_on_type_and_time ON public.audit_events USING bt
 
 
 --
+-- Name: index_derived_signals_identity; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_derived_signals_identity ON public.derived_signals USING btree (organization_id, subject_id, semantic_key, semantic_version, window_started_at, window_ended_at, algorithm_version);
+
+
+--
+-- Name: index_derived_signals_on_evidence_set_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_derived_signals_on_evidence_set_id ON public.derived_signals USING btree (evidence_set_id);
+
+
+--
+-- Name: index_derived_signals_on_org_subject_key_time; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_derived_signals_on_org_subject_key_time ON public.derived_signals USING btree (organization_id, subject_id, semantic_key, window_ended_at DESC);
+
+
+--
+-- Name: index_derived_signals_on_organization_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_derived_signals_on_organization_id ON public.derived_signals USING btree (organization_id);
+
+
+--
+-- Name: index_derived_signals_on_subject_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_derived_signals_on_subject_id ON public.derived_signals USING btree (subject_id);
+
+
+--
 -- Name: index_devices_identity; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -764,6 +889,55 @@ CREATE INDEX index_events_on_source_id ON public.events USING btree (source_id);
 --
 
 CREATE INDEX index_events_on_subject_id ON public.events USING btree (subject_id);
+
+
+--
+-- Name: index_evidence_items_on_evidence_set_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_evidence_items_on_evidence_set_id ON public.evidence_items USING btree (evidence_set_id);
+
+
+--
+-- Name: index_evidence_items_on_organization_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_evidence_items_on_organization_id ON public.evidence_items USING btree (organization_id);
+
+
+--
+-- Name: index_evidence_items_on_record; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_evidence_items_on_record ON public.evidence_items USING btree (organization_id, record_type, record_id);
+
+
+--
+-- Name: index_evidence_items_on_set_and_ordinal; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_evidence_items_on_set_and_ordinal ON public.evidence_items USING btree (evidence_set_id, ordinal);
+
+
+--
+-- Name: index_evidence_items_unique_per_set; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_evidence_items_unique_per_set ON public.evidence_items USING btree (evidence_set_id, record_type, record_id, role);
+
+
+--
+-- Name: index_evidence_sets_on_org_purpose_fingerprint; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_evidence_sets_on_org_purpose_fingerprint ON public.evidence_sets USING btree (organization_id, purpose, fingerprint);
+
+
+--
+-- Name: index_evidence_sets_on_organization_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_evidence_sets_on_organization_id ON public.evidence_sets USING btree (organization_id);
 
 
 --
@@ -1202,11 +1376,27 @@ ALTER TABLE ONLY public.subject_identifiers
 
 
 --
+-- Name: evidence_items fk_rails_03f3451d9e; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.evidence_items
+    ADD CONSTRAINT fk_rails_03f3451d9e FOREIGN KEY (evidence_set_id) REFERENCES public.evidence_sets(id);
+
+
+--
 -- Name: raw_envelopes fk_rails_04cab64491; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.raw_envelopes
     ADD CONSTRAINT fk_rails_04cab64491 FOREIGN KEY (organization_id) REFERENCES public.organizations(id);
+
+
+--
+-- Name: evidence_sets fk_rails_0b249d477f; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.evidence_sets
+    ADD CONSTRAINT fk_rails_0b249d477f FOREIGN KEY (organization_id) REFERENCES public.organizations(id);
 
 
 --
@@ -1263,6 +1453,14 @@ ALTER TABLE ONLY public.events
 
 ALTER TABLE ONLY public.intervals
     ADD CONSTRAINT fk_rails_2211a4c606 FOREIGN KEY (raw_envelope_id) REFERENCES public.raw_envelopes(id);
+
+
+--
+-- Name: derived_signals fk_rails_2554361053; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.derived_signals
+    ADD CONSTRAINT fk_rails_2554361053 FOREIGN KEY (evidence_set_id) REFERENCES public.evidence_sets(id);
 
 
 --
@@ -1335,6 +1533,14 @@ ALTER TABLE ONLY public.observation_groups
 
 ALTER TABLE ONLY public.events
     ADD CONSTRAINT fk_rails_635245fc67 FOREIGN KEY (subject_id) REFERENCES public.subjects(id);
+
+
+--
+-- Name: evidence_items fk_rails_69ea66f966; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.evidence_items
+    ADD CONSTRAINT fk_rails_69ea66f966 FOREIGN KEY (organization_id) REFERENCES public.organizations(id);
 
 
 --
@@ -1426,11 +1632,27 @@ ALTER TABLE ONLY public.subjects
 
 
 --
+-- Name: derived_signals fk_rails_9d20e5fb0b; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.derived_signals
+    ADD CONSTRAINT fk_rails_9d20e5fb0b FOREIGN KEY (subject_id) REFERENCES public.subjects(id);
+
+
+--
 -- Name: observation_groups fk_rails_a4d23a4737; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.observation_groups
     ADD CONSTRAINT fk_rails_a4d23a4737 FOREIGN KEY (subject_id) REFERENCES public.subjects(id);
+
+
+--
+-- Name: derived_signals fk_rails_b1e4d6b690; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.derived_signals
+    ADD CONSTRAINT fk_rails_b1e4d6b690 FOREIGN KEY (organization_id) REFERENCES public.organizations(id);
 
 
 --
@@ -1576,6 +1798,8 @@ ALTER TABLE ONLY public.intervals
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20260809120100'),
+('20260809120000'),
 ('20260809110300'),
 ('20260809110200'),
 ('20260809110100'),

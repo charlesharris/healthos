@@ -48,6 +48,14 @@ module Healthos
       g.system_tests = nil
     end
 
+    # Domain pack subdirectories (semantics/, derived_signals/, monitors/,
+    # cases/, contexts/, baselines/, comparisons/) are organizational
+    # categories from HO §24, not namespaces. Collapsing them means a pack's
+    # code reads as Hypertension::DailyBloodPressureSummary rather than
+    # Hypertension::DerivedSignals::DailyBloodPressureSummary, which keeps the
+    # domain vocabulary flat and matches how the handover talks about it.
+    Rails.autoloaders.main.collapse("#{root}/app/domain_packs/*/*")
+
     # All times are stored and reasoned about in UTC. Subject-local time is a
     # display and analysis concern derived from `subjects.timezone`
     # (epic 001-04), never an ambient default — HO §121 calls out timezone
