@@ -112,6 +112,25 @@ land), bulk clinical actions.
 
 ## Decision Log
 
+### 2026-08-09 — the ground-truth spec needed no bucket (CI fix)
+
+The demo ground-truth spec passed locally and failed in CI: the seed
+reaches for `Storage::RawPayloadStore.instance` itself, and the `test`
+job has no MinIO. Locally the container was simply up.
+
+Fixed by giving the store a writable `instance` seam rather than adding
+MinIO to the unit job. The unit suite deliberately runs without object
+storage — the real round trip is exercised by the ingestion integrity
+specs and by `bin/smoke`, and making every developer run a bucket to
+test a statistical question puts an unrelated dependency in the way.
+`InMemoryPayloadStore` reproduces content addressing and hash
+verification faithfully rather than stubbing them, because a fake that
+returned whatever it was given would make the integrity checks
+untestable.
+
+Verified by stopping MinIO and running the whole suite: 549 examples, 0
+failures, 22 pending (the storage specs skipping as designed).
+
 ### 2026-08-09 — demo population, and a demo that checks itself
 
 The epic gate asks for "a small operable population incl. a monitoring

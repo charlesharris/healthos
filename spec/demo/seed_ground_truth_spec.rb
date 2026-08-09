@@ -39,6 +39,11 @@ RSpec.describe "demo:seed ground truth", type: :model do
   before(:all) do
     MigratorConnection.wipe_tenant_data!
 
+    # The seed reaches for Storage::RawPayloadStore.instance itself, so the
+    # store is swapped rather than injected. The unit suite runs without a
+    # bucket by design; bin/smoke covers the real round trip.
+    Storage::RawPayloadStore.instance = InMemoryPayloadStore.new
+
     Rails.application.load_tasks unless Rake::Task.task_defined?("demo:seed")
 
     ENV["DEMO_POPULATION"] = "0"
@@ -48,6 +53,7 @@ RSpec.describe "demo:seed ground truth", type: :model do
 
   after(:all) do
     ENV.delete("DEMO_POPULATION")
+    Storage::RawPayloadStore.reset_instance!
     MigratorConnection.wipe_tenant_data!
   end
 

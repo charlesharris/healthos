@@ -18,8 +18,21 @@ module Storage
 
     DEFAULT_BUCKET = "healthos-raw-payloads"
 
-    def self.instance
-      @instance ||= new
+    class << self
+      def instance = @instance ||= new
+
+      # A seam, used by specs that drive code which reaches for the store
+      # itself rather than accepting one (the demo seed, notably).
+      #
+      # The unit suite deliberately runs without object storage: the real
+      # MinIO round trip is exercised by the ingestion integrity specs and by
+      # `bin/smoke`, and making every developer run a bucket to test a
+      # statistical question puts an unrelated dependency in the way. Callers
+      # that CAN take a store injected should keep doing that — this is for
+      # the ones that cannot.
+      attr_writer :instance
+
+      def reset_instance! = @instance = nil
     end
 
     def initialize(bucket: nil, client: nil)
