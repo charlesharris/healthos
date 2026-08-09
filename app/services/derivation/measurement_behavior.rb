@@ -60,9 +60,16 @@ module Derivation
                     status: "insufficient_input")
       end
 
+      # Windows are HALF-OPEN — [start, finish) — throughout the codebase, so
+      # the day count is the plain difference between the boundary dates with
+      # no +1. An inclusive count here silently measured a 21-day baseline as
+      # 22 days, scaling the two sides of a before/after ratio by different
+      # factors. Found when the monitor pack started reusing this algorithm
+      # instead of carrying its own copy.
       def window_days
         zone = ActiveSupport::TimeZone[@subject.timezone]
-        (@window.last.in_time_zone(zone).to_date - @window.first.in_time_zone(zone).to_date).to_i + 1
+        days = (@window.last.in_time_zone(zone).to_date - @window.first.in_time_zone(zone).to_date).to_i
+        days.positive? ? days : 1
       end
     end
 

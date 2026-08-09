@@ -47,7 +47,7 @@ RSpec.describe "Measurement behaviour signals", type: :model do
       3.times { |i| observe(days_ago: i + 1) }
 
       outcome = Derivation::MeasurementBehavior::Frequency.new(
-        observations: Observation.all, window: [ as_of - 6.days, as_of ], subject: subject_record
+        observations: Observation.all, window: [ as_of - 7.days, as_of ], subject: subject_record
       ).call
 
       # 3 readings over a 7-day window, rounded to 4dp as the algorithm does.
@@ -63,7 +63,7 @@ RSpec.describe "Measurement behaviour signals", type: :model do
       2.times { |i| observe(days_ago: i + 1) }
 
       outcome = Derivation::MeasurementBehavior::Frequency.new(
-        observations: Observation.all, window: [ as_of - 1.day, as_of ], subject: subject_record
+        observations: Observation.all, window: [ as_of - 2.days, as_of ], subject: subject_record
       ).call
 
       expect(outcome.status).to eq("computed")
@@ -74,7 +74,7 @@ RSpec.describe "Measurement behaviour signals", type: :model do
       observe(days_ago: 2, quality_state: "device_not_reporting")
 
       outcome = Derivation::MeasurementBehavior::Frequency.new(
-        observations: Observation.all, window: [ as_of - 1.day, as_of ], subject: subject_record
+        observations: Observation.all, window: [ as_of - 2.days, as_of ], subject: subject_record
       ).call
 
       # STAT-002: a gap is not a reading. It appears in raw_input_count, never

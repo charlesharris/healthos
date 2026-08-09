@@ -68,8 +68,8 @@ module Hypertension
     end
 
     def evaluate(subject:, as_of:)
-      recent_window = window_ending(as_of, parameters[:recent_days])
-      baseline_window = window_ending(recent_window.first, parameters[:baseline_days])
+      recent_window = day_aligned_window_ending(subject, as_of, parameters[:recent_days])
+      baseline_window = day_aligned_window_ending(subject, recent_window.first, parameters[:baseline_days])
 
       recent = observed_readings(subject, SEMANTIC_KEY, recent_window)
       baseline = observed_readings(subject, SEMANTIC_KEY, baseline_window)

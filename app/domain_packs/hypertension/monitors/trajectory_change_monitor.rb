@@ -19,6 +19,11 @@ module Hypertension
   #   003, which weighs completeness, source stability and variance before
   #   saying anything. A Signal is a reason to look, never a finding.
   class TrajectoryChangeMonitor < Monitoring::Monitor
+    # Shared day-aligned window arithmetic. This monitor previously carried a
+    # private copy that was not day-aligned — the summaries it reads are
+    # day-aligned by construction, so it happened not to matter, but two
+    # implementations of the same idea is how they drift apart.
+    include MonitorWindows
     KEY = "blood_pressure_trajectory_change"
     VERSION = 1
     DOMAIN_KEY = "hypertension"
@@ -47,8 +52,8 @@ module Hypertension
     end
 
     def evaluate(subject:, as_of:)
-      recent_window = window_ending(as_of, parameters[:recent_days])
-      baseline_window = window_ending(recent_window.first, parameters[:baseline_days])
+      recent_window = day_aligned_window_ending(subject, as_of, parameters[:recent_days])
+      baseline_window = day_aligned_window_ending(subject, recent_window.first, parameters[:baseline_days])
 
       recent = summaries_in(subject, recent_window)
       baseline = summaries_in(subject, baseline_window)
@@ -99,10 +104,6 @@ module Hypertension
     end
 
     private
-
-    def window_ending(finish, days)
-      [ finish - days.days, finish ]
-    end
 
     def summaries_in(subject, window)
       DerivedSignal

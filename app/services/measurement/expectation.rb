@@ -74,11 +74,16 @@ module Measurement
     # Days in the subject's own timezone. Completeness is day-based, and a UTC
     # day boundary would attribute an evening reading to the wrong day
     # (HO §121).
+    #
+    # HALF-OPEN — [start, finish) — matching every other window in the
+    # codebase. One convention, stated once: a mixture is how a 21-day
+    # baseline ends up measured as 22 days, and how two adjacent windows end
+    # up both counting the same boundary reading.
     def local_dates(subject, window)
       zone = ActiveSupport::TimeZone[subject.timezone]
       from = window.first.in_time_zone(zone).to_date
       to = window.last.in_time_zone(zone).to_date
-      (from..to).to_a
+      (from...to).to_a.presence || [ from ]
     end
   end
 

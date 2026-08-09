@@ -57,7 +57,7 @@ module Hypertension
     end
 
     def evaluate(subject:, as_of:)
-      window = window_ending(as_of, parameters[:window_days])
+      window = day_aligned_window_ending(subject, as_of, parameters[:window_days])
       readings = observed_readings(subject, SEMANTIC_KEY, window)
         .select { |reading| reading.value_numeric.present? }
 

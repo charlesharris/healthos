@@ -67,8 +67,8 @@ module Hypertension
     end
 
     def evaluate(subject:, as_of:)
-      recent_window = window_ending(as_of, parameters[:recent_days])
-      baseline_window = window_ending(recent_window.first, parameters[:baseline_days])
+      recent_window = day_aligned_window_ending(subject, as_of, parameters[:recent_days])
+      baseline_window = day_aligned_window_ending(subject, recent_window.first, parameters[:baseline_days])
 
       recent = observed_readings(subject, SEMANTIC_KEY, recent_window)
       baseline = observed_readings(subject, SEMANTIC_KEY, baseline_window)
@@ -84,8 +84,8 @@ module Hypertension
       # not a zero-imputed value — STAT-002 forbids inventing a biological
       # zero from absence, and says nothing against counting how often a
       # measurement actually happened.
-      recent_rate = rate_per_day(recent.size, parameters[:recent_days])
-      baseline_rate = rate_per_day(baseline.size, parameters[:baseline_days])
+      recent_rate = rate_per_day(subject, recent, recent_window)
+      baseline_rate = rate_per_day(subject, baseline, baseline_window)
       retained = (recent_rate / baseline_rate).round(4)
 
       if retained > parameters[:cadence_retained_ratio]
@@ -100,13 +100,20 @@ module Hypertension
 
     private
 
-    # Deliberately the window's exact span rather than the count of calendar
-    # dates it touches. `Derivation::MeasurementBehavior::Frequency` reports
-    # the same quantity over day-aligned windows, where the calendar count is
-    # the right denominator; over a rolling window ending mid-day it is not,
-    # and a recent and a baseline window would be scaled by different factors.
-    def rate_per_day(count, days)
-      (BigDecimal(count) / days).round(4)
+    # Delegates to platform core rather than reimplementing the quantity.
+    #
+    # This is only correct because the windows are day-aligned (see
+    # MonitorWindows): the algorithm's denominator is the count of calendar
+    # dates the window covers, which equals the window's span in days only
+    # when the window starts and ends on a local day boundary. An earlier
+    # version divided by the configured span precisely because rolling
+    # windows broke that equality.
+    def rate_per_day(subject, readings, window)
+      outcome = Derivation::MeasurementBehavior::Frequency.new(
+        observations: readings, window: window, subject: subject
+      ).call
+
+      outcome.value_numeric || BigDecimal(0)
     end
 
     def triggered_result(subject, window, recent, baseline, recent_rate, baseline_rate, retained)

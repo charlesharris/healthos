@@ -26,7 +26,11 @@ RSpec.describe "Measurement expectation and completeness", type: :model do
   # begins on 8 March 2026, so the last local day is an hour shorter in UTC
   # terms. Getting this wrong silently adds an eighth day, which is exactly
   # the class of error HO §121 makes a required regression case.
-  let(:window) { [ Time.utc(2026, 3, 2, 5, 0), Time.utc(2026, 3, 9, 3, 59) ] }
+  # Half-open: local midnight 2 March to local midnight 9 March, i.e. the
+  # seven days 2-8 March. The end bound is 04:00 UTC, not 05:00, because US
+  # DST begins on 8 March 2026 and local midnight moves an hour earlier in UTC
+  # terms — HO §121's regression case, in the fixture itself.
+  let(:window) { [ Time.utc(2026, 3, 2, 5, 0), Time.utc(2026, 3, 9, 4, 0) ] }
 
   def observe(date_str, quality_state: "observed", hour: 14)
     at = ActiveSupport::TimeZone["America/New_York"].parse("#{date_str} #{hour}:00")

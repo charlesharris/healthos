@@ -110,6 +110,38 @@ land), bulk clinical actions.
 
 ## Decision Log
 
+### 2026-08-09 — one window convention: half-open, day-aligned
+
+Day-aligning the monitor windows so the shared frequency algorithm could
+be reused, as asked. Reuse immediately exposed something worse than the
+duplication it removed.
+
+**`Frequency#window_days` counted dates inclusively while every monitor
+window is half-open.** So a 21-day baseline measured as 22 days, a 7-day
+recent window as 8, and the two sides of a before/after ratio were
+scaled by different factors — a permanent, silent bias in exactly the
+comparison the monitor exists to make. The sub-agent had avoided this by
+keeping a private denominator; reusing the algorithm is what made the
+mismatch visible.
+
+**Half-open `[start, finish)` is now the single convention**, stated in
+`MonitorWindows`, `Frequency#window_days` and
+`Expectation#local_dates`. A mixture of conventions is how a 21-day
+window becomes 22 days, and how two adjacent windows both count the same
+boundary reading. Windows also align to LOCAL midnight, not UTC:
+otherwise a window's length changes silently across a DST transition
+(HO §121).
+
+**Two duplicate implementations removed.** The trajectory monitor
+carried its own private `window_ending`; it now includes
+`MonitorWindows`. The unaligned helper was deleted rather than left
+available, because dead code that still looks usable is a trap.
+
+**A spec fixture now encodes the DST case explicitly**: the completeness
+window ends at 04:00 UTC rather than 05:00, because local midnight on
+9 March 2026 moves an hour earlier in UTC terms. That is HO §121's
+required regression case sitting in a fixture where it will be noticed.
+
 ### 2026-08-09 — 002-07 to 002-11 monitor pack
 
 Built by a sub-agent against the trajectory monitor as reference;
@@ -129,6 +161,10 @@ SC §11 bands.** Surfacing a candidate for a human to look at and rating
 statistical evidence are different jobs in different places; a monitor
 that fired exactly at 30% would blur them and put a governed value in
 the wrong file.
+
+**RESOLVED 2026-08-09 (Charles): monitor windows are now day-aligned and
+the algorithm is reused.** Doing it surfaced a deeper problem — see the
+window-convention entry above. Original note follows.
 
 **A cadence-denominator bug avoided, worth recording.** The obvious move
 was to reuse `Derivation::MeasurementBehavior::Frequency` for the
