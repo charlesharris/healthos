@@ -89,6 +89,7 @@ mutable:
 
   # Infrastructure
   - domain_events             # the outbox updates dispatch state, HO §49
+                              # (dispatched_at, attempts, last_error)
   - integration_credentials   # rotation
 
 # Rails-managed tables. Classified so the completeness spec has a home for

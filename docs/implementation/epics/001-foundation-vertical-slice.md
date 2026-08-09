@@ -65,11 +65,11 @@ semantics in Epic 002); provenance invariants 1–3.
 - **Contract:** INV-31; S2C-022
 
 ### 001-03 Transactional outbox skeleton
-- [ ] `domain_events` table (§49 columns), `Outbox::DispatchJob`
+- [x] `domain_events` table (§49 columns), `Outbox::DispatchJob`
       dispatcher converting durable events → Active Jobs
-- [ ] Helper for "insert domain_event inside the same transaction as
-      the state change"
-- [ ] Specs: commit + dispatcher crash → event redelivered; dispatch is
+- [x] Helper for "insert domain_event inside the same transaction as
+      the state change" (`Outbox.publish`)
+- [x] Specs: commit + dispatcher crash → event redelivered; dispatch is
       idempotent (S2C-020, S2C-021)
 
 ### 001-04 Subject model
@@ -329,3 +329,53 @@ Now handled explicitly in `tenant_id_for`.
 Cross-tenant references render 404 rather than 403, so a response never
 confirms that a record exists in another organization (HO §123 lists ID
 enumeration as a required security test).
+
+### 2026-08-09 — 001-03 transactional outbox
+
+**Delivery is at-least-once, by choice, and the ordering is the whole
+argument.** The enqueue targets the queue database while `dispatched_at`
+targets the primary (HO §6.3), so they cannot share a transaction —
+this is the dual-write the outbox exists to survive, reappearing one
+level down. Given the two available orderings:
+
+- enqueue then mark — a crash between them redelivers, so a handler may
+  run twice
+- mark then enqueue — a crash between them loses the event entirely
+
+we enqueue first. Losing an event is unrecoverable; running a handler
+twice is something S2C-020 already obliges every job to tolerate.
+Both branches are covered by spec.
+
+**Rows are claimed with `FOR UPDATE SKIP LOCKED`** so several
+dispatchers can run without double-claiming or blocking. The spec
+asserts the clause reaches SQL; genuine parallel contention is exercised
+by the HO §120 concurrency specs in 001-11, which have real contention
+to create.
+
+**`Outbox.publish` refuses to run outside a transaction.** Publishing
+outside one still writes a row but silently provides none of the S2C-021
+guarantee, which is worse than failing. Proving this needs transactional
+fixtures disabled — otherwise the surrounding test transaction satisfies
+the guard trivially — so it lives in its own spec file. A first attempt
+kept it as a nested context, which committed the shared organization and
+broke ten sibling examples on a unique-slug violation.
+
+**Event types are enumerated, and handlers are registered explicitly.**
+A typo becomes a raised error rather than an event nothing listens for.
+`Outbox::Registry` starts empty on purpose: the skeleton lands before
+anything it will carry, and each epic registers its own consumer. Reading
+the registry then tells you every consequence an event can have, which is
+the visibility HO §115 asks for when it warns against hidden workflow.
+
+**Only the event id crosses the job boundary**, never the payload
+(CLAUDE.md: "Pass IDs to jobs, never payloads"). Job arguments are
+serialized into the queue database and surface in job introspection.
+A spec asserts the payload contents do not appear in the enqueued
+arguments. `last_error` is truncated to 500 characters for the same
+reason — it is written to a tenant-facing table.
+
+**A failing event cannot block the batch.** Attempt counters are bumped
+in a nested transaction so one poisoned event does not roll back its
+peers, and events stop being selected after `MAX_ATTEMPTS` rather than
+starving newer ones. Dead events are retained, never deleted, so support
+can still see them (HO §157).

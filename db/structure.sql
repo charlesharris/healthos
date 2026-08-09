@@ -27,6 +27,26 @@ CREATE TABLE public.ar_internal_metadata (
 
 
 --
+-- Name: domain_events; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.domain_events (
+    id uuid DEFAULT uuidv7() NOT NULL,
+    organization_id uuid NOT NULL,
+    aggregate_type character varying NOT NULL,
+    aggregate_id uuid NOT NULL,
+    event_type character varying NOT NULL,
+    payload jsonb DEFAULT '{}'::jsonb NOT NULL,
+    occurred_at timestamp(6) without time zone NOT NULL,
+    dispatched_at timestamp(6) without time zone,
+    attempts integer DEFAULT 0 NOT NULL,
+    last_error text,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL
+);
+
+
+--
 -- Name: invitations; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -42,7 +62,7 @@ CREATE TABLE public.invitations (
     accepted_by_id uuid,
     created_at timestamp(6) without time zone NOT NULL,
     updated_at timestamp(6) without time zone NOT NULL,
-    CONSTRAINT invitations_role_check CHECK (((role)::text = ANY (ARRAY[('organization_admin'::character varying)::text, ('clinical_ops'::character varying)::text, ('clinician'::character varying)::text, ('analyst'::character varying)::text, ('support_limited'::character varying)::text])))
+    CONSTRAINT invitations_role_check CHECK (((role)::text = ANY ((ARRAY['organization_admin'::character varying, 'clinical_ops'::character varying, 'clinician'::character varying, 'analyst'::character varying, 'support_limited'::character varying])::text[])))
 );
 
 
@@ -60,8 +80,8 @@ CREATE TABLE public.organization_memberships (
     joined_at timestamp(6) without time zone,
     created_at timestamp(6) without time zone NOT NULL,
     updated_at timestamp(6) without time zone NOT NULL,
-    CONSTRAINT organization_memberships_role_check CHECK (((role)::text = ANY (ARRAY[('organization_admin'::character varying)::text, ('clinical_ops'::character varying)::text, ('clinician'::character varying)::text, ('analyst'::character varying)::text, ('support_limited'::character varying)::text]))),
-    CONSTRAINT organization_memberships_status_check CHECK (((status)::text = ANY (ARRAY[('invited'::character varying)::text, ('active'::character varying)::text, ('suspended'::character varying)::text])))
+    CONSTRAINT organization_memberships_role_check CHECK (((role)::text = ANY ((ARRAY['organization_admin'::character varying, 'clinical_ops'::character varying, 'clinician'::character varying, 'analyst'::character varying, 'support_limited'::character varying])::text[]))),
+    CONSTRAINT organization_memberships_status_check CHECK (((status)::text = ANY ((ARRAY['invited'::character varying, 'active'::character varying, 'suspended'::character varying])::text[])))
 );
 
 
@@ -76,7 +96,7 @@ CREATE TABLE public.organizations (
     status character varying DEFAULT 'active'::character varying NOT NULL,
     created_at timestamp(6) without time zone NOT NULL,
     updated_at timestamp(6) without time zone NOT NULL,
-    CONSTRAINT organizations_status_check CHECK (((status)::text = ANY (ARRAY[('active'::character varying)::text, ('suspended'::character varying)::text])))
+    CONSTRAINT organizations_status_check CHECK (((status)::text = ANY ((ARRAY['active'::character varying, 'suspended'::character varying])::text[])))
 );
 
 
@@ -128,7 +148,7 @@ CREATE TABLE public.teams (
     status character varying DEFAULT 'active'::character varying NOT NULL,
     created_at timestamp(6) without time zone NOT NULL,
     updated_at timestamp(6) without time zone NOT NULL,
-    CONSTRAINT teams_status_check CHECK (((status)::text = ANY (ARRAY[('active'::character varying)::text, ('archived'::character varying)::text])))
+    CONSTRAINT teams_status_check CHECK (((status)::text = ANY ((ARRAY['active'::character varying, 'archived'::character varying])::text[])))
 );
 
 
@@ -144,7 +164,7 @@ CREATE TABLE public.users (
     status character varying DEFAULT 'active'::character varying NOT NULL,
     created_at timestamp(6) without time zone NOT NULL,
     updated_at timestamp(6) without time zone NOT NULL,
-    CONSTRAINT users_status_check CHECK (((status)::text = ANY (ARRAY[('active'::character varying)::text, ('disabled'::character varying)::text])))
+    CONSTRAINT users_status_check CHECK (((status)::text = ANY ((ARRAY['active'::character varying, 'disabled'::character varying])::text[])))
 );
 
 
@@ -154,6 +174,14 @@ CREATE TABLE public.users (
 
 ALTER TABLE ONLY public.ar_internal_metadata
     ADD CONSTRAINT ar_internal_metadata_pkey PRIMARY KEY (key);
+
+
+--
+-- Name: domain_events domain_events_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.domain_events
+    ADD CONSTRAINT domain_events_pkey PRIMARY KEY (id);
 
 
 --
@@ -218,6 +246,34 @@ ALTER TABLE ONLY public.teams
 
 ALTER TABLE ONLY public.users
     ADD CONSTRAINT users_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: index_domain_events_on_aggregate; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_domain_events_on_aggregate ON public.domain_events USING btree (organization_id, aggregate_type, aggregate_id, occurred_at);
+
+
+--
+-- Name: index_domain_events_on_org_and_type; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_domain_events_on_org_and_type ON public.domain_events USING btree (organization_id, event_type, occurred_at);
+
+
+--
+-- Name: index_domain_events_on_organization_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_domain_events_on_organization_id ON public.domain_events USING btree (organization_id);
+
+
+--
+-- Name: index_domain_events_pending; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_domain_events_pending ON public.domain_events USING btree (occurred_at, id) WHERE (dispatched_at IS NULL);
 
 
 --
@@ -410,6 +466,14 @@ ALTER TABLE ONLY public.sessions
 
 
 --
+-- Name: domain_events fk_rails_8afe43432b; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.domain_events
+    ADD CONSTRAINT fk_rails_8afe43432b FOREIGN KEY (organization_id) REFERENCES public.organizations(id);
+
+
+--
 -- Name: invitations fk_rails_d799c974a1; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -440,6 +504,7 @@ ALTER TABLE ONLY public.team_memberships
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20260809071500'),
 ('20260809065957'),
 ('20260809065956'),
 ('20260809065955'),

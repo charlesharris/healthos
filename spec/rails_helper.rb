@@ -49,6 +49,15 @@ rescue ActiveRecord::PendingMigrationError => e
   MESSAGE
 end
 RSpec.configure do |config|
+  # Jobs are enqueued, not run, unless a spec says otherwise. The outbox
+  # specs assert on what reached the queue, and S2C-020's at-least-once
+  # contract is about enqueue behaviour rather than handler execution.
+  config.before do
+    ActiveJob::Base.queue_adapter = :test
+    ActiveJob::Base.queue_adapter.enqueued_jobs.clear
+    ActiveJob::Base.queue_adapter.performed_jobs.clear
+  end
+
   # Remove this line if you're not using ActiveRecord or ActiveRecord fixtures
   config.fixture_paths = [
     Rails.root.join('spec/fixtures')
