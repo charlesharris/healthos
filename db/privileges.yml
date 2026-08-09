@@ -95,7 +95,7 @@ mutable:
   # Operational case state
   - case_correlation_scopes   # lock row, HO §35
   - cases                     # the stateful unit of human work, HO §36
-  - watch_conditions          # satisfied/cancelled, HO §45
+  - watch_conditions          # satisfied_at is set when met, HO §45
   - workflow_actions          # retry and dispatch state
 
   # Platform staff access. Not tenant-scoped: staff see across

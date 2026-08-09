@@ -29,6 +29,13 @@ module Cases
     has_many :signals, through: :case_signals, source: :signal
     has_many :case_events, -> { order(:occurred_at) }, dependent: :restrict_with_error,
       foreign_key: :case_id, inverse_of: :case_record
+    has_many :dispositions, -> { order(:disposed_at) }, class_name: "Cases::Disposition",
+      dependent: :restrict_with_error, foreign_key: :case_id, inverse_of: :case_record
+    has_many :watch_conditions, class_name: "Cases::WatchCondition",
+      dependent: :restrict_with_error, foreign_key: :case_id, inverse_of: :case_record
+
+    # S2C-016: the most recent disposition, with earlier ones still readable.
+    def latest_disposition = dispositions.last
 
     validates :domain_key, :case_type, :started_at, :detected_at, presence: true
     validates :status, inclusion: { in: STATUSES }

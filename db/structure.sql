@@ -61,6 +61,26 @@ CREATE TABLE public.case_correlation_scopes (
 
 
 --
+-- Name: case_dispositions; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.case_dispositions (
+    id uuid DEFAULT uuidv7() NOT NULL,
+    organization_id uuid NOT NULL,
+    case_id uuid NOT NULL,
+    actor_id uuid NOT NULL,
+    code text NOT NULL,
+    notes text,
+    action_type text,
+    external_reference text,
+    disposed_at timestamp(6) without time zone NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT case_dispositions_code_check CHECK ((code = ANY (ARRAY['action_taken'::text, 'expected_change'::text, 'instrumentation_issue'::text, 'data_quality_issue'::text, 'already_known'::text, 'not_actionable'::text, 'insufficient_evidence'::text, 'duplicate'::text, 'false_positive'::text, 'escalated_external'::text])))
+);
+
+
+--
 -- Name: case_events; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -666,6 +686,49 @@ CREATE TABLE public.users (
 
 
 --
+-- Name: watch_conditions; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.watch_conditions (
+    id uuid DEFAULT uuidv7() NOT NULL,
+    organization_id uuid NOT NULL,
+    case_id uuid NOT NULL,
+    created_by_id uuid,
+    condition_type text NOT NULL,
+    parameters jsonb DEFAULT '{}'::jsonb NOT NULL,
+    expires_at timestamp(6) without time zone,
+    satisfied_at timestamp(6) without time zone,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT watch_conditions_condition_type_check CHECK ((condition_type = ANY (ARRAY['time_elapsed'::text, 'new_observation_count'::text, 'new_signal'::text, 'threshold_crossed'::text])))
+);
+
+
+--
+-- Name: workflow_actions; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.workflow_actions (
+    id uuid DEFAULT uuidv7() NOT NULL,
+    organization_id uuid NOT NULL,
+    case_id uuid NOT NULL,
+    requested_by_id uuid,
+    action_type text NOT NULL,
+    status text DEFAULT 'pending'::text NOT NULL,
+    parameters jsonb DEFAULT '{}'::jsonb NOT NULL,
+    result jsonb DEFAULT '{}'::jsonb NOT NULL,
+    idempotency_key text NOT NULL,
+    attempts integer DEFAULT 0 NOT NULL,
+    last_error text,
+    dispatched_at timestamp(6) without time zone,
+    completed_at timestamp(6) without time zone,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT workflow_actions_status_check CHECK ((status = ANY (ARRAY['pending'::text, 'dispatched'::text, 'succeeded'::text, 'failed'::text, 'cancelled'::text])))
+);
+
+
+--
 -- Name: ar_internal_metadata ar_internal_metadata_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -687,6 +750,14 @@ ALTER TABLE ONLY public.audit_events
 
 ALTER TABLE ONLY public.case_correlation_scopes
     ADD CONSTRAINT case_correlation_scopes_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: case_dispositions case_dispositions_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.case_dispositions
+    ADD CONSTRAINT case_dispositions_pkey PRIMARY KEY (id);
 
 
 --
@@ -922,6 +993,22 @@ ALTER TABLE ONLY public.users
 
 
 --
+-- Name: watch_conditions watch_conditions_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.watch_conditions
+    ADD CONSTRAINT watch_conditions_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: workflow_actions workflow_actions_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.workflow_actions
+    ADD CONSTRAINT workflow_actions_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: index_audit_events_on_actor_and_time; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -982,6 +1069,41 @@ CREATE INDEX index_case_correlation_scopes_on_organization_id ON public.case_cor
 --
 
 CREATE INDEX index_case_correlation_scopes_on_subject_id ON public.case_correlation_scopes USING btree (subject_id);
+
+
+--
+-- Name: index_case_dispositions_on_actor_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_case_dispositions_on_actor_id ON public.case_dispositions USING btree (actor_id);
+
+
+--
+-- Name: index_case_dispositions_on_case_and_time; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_case_dispositions_on_case_and_time ON public.case_dispositions USING btree (case_id, disposed_at);
+
+
+--
+-- Name: index_case_dispositions_on_case_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_case_dispositions_on_case_id ON public.case_dispositions USING btree (case_id);
+
+
+--
+-- Name: index_case_dispositions_on_org_code_time; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_case_dispositions_on_org_code_time ON public.case_dispositions USING btree (organization_id, code, disposed_at);
+
+
+--
+-- Name: index_case_dispositions_on_organization_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_case_dispositions_on_organization_id ON public.case_dispositions USING btree (organization_id);
 
 
 --
@@ -1811,6 +1933,76 @@ CREATE UNIQUE INDEX index_users_on_email_address ON public.users USING btree (em
 
 
 --
+-- Name: index_watch_conditions_on_case_and_satisfied; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_watch_conditions_on_case_and_satisfied ON public.watch_conditions USING btree (case_id, satisfied_at);
+
+
+--
+-- Name: index_watch_conditions_on_case_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_watch_conditions_on_case_id ON public.watch_conditions USING btree (case_id);
+
+
+--
+-- Name: index_watch_conditions_on_created_by_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_watch_conditions_on_created_by_id ON public.watch_conditions USING btree (created_by_id);
+
+
+--
+-- Name: index_watch_conditions_on_organization_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_watch_conditions_on_organization_id ON public.watch_conditions USING btree (organization_id);
+
+
+--
+-- Name: index_watch_conditions_pending; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_watch_conditions_pending ON public.watch_conditions USING btree (organization_id, expires_at) WHERE (satisfied_at IS NULL);
+
+
+--
+-- Name: index_workflow_actions_idempotency; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_workflow_actions_idempotency ON public.workflow_actions USING btree (organization_id, idempotency_key);
+
+
+--
+-- Name: index_workflow_actions_on_case_and_time; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_workflow_actions_on_case_and_time ON public.workflow_actions USING btree (case_id, created_at);
+
+
+--
+-- Name: index_workflow_actions_on_case_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_workflow_actions_on_case_id ON public.workflow_actions USING btree (case_id);
+
+
+--
+-- Name: index_workflow_actions_on_organization_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_workflow_actions_on_organization_id ON public.workflow_actions USING btree (organization_id);
+
+
+--
+-- Name: index_workflow_actions_on_requested_by_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_workflow_actions_on_requested_by_id ON public.workflow_actions USING btree (requested_by_id);
+
+
+--
 -- Name: subject_identifiers fk_rails_038ebe50fb; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1939,6 +2131,22 @@ ALTER TABLE ONLY public.staff_members
 
 
 --
+-- Name: case_dispositions fk_rails_31dfb9bb91; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.case_dispositions
+    ADD CONSTRAINT fk_rails_31dfb9bb91 FOREIGN KEY (actor_id) REFERENCES public.users(id);
+
+
+--
+-- Name: watch_conditions fk_rails_32d123ef4d; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.watch_conditions
+    ADD CONSTRAINT fk_rails_32d123ef4d FOREIGN KEY (organization_id) REFERENCES public.organizations(id);
+
+
+--
 -- Name: invitations fk_rails_3d8c31759f; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1952,6 +2160,22 @@ ALTER TABLE ONLY public.invitations
 
 ALTER TABLE ONLY public.audit_events
     ADD CONSTRAINT fk_rails_4463a8ee29 FOREIGN KEY (staff_member_id) REFERENCES public.staff_members(id);
+
+
+--
+-- Name: workflow_actions fk_rails_44659725be; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.workflow_actions
+    ADD CONSTRAINT fk_rails_44659725be FOREIGN KEY (organization_id) REFERENCES public.organizations(id);
+
+
+--
+-- Name: watch_conditions fk_rails_4701996be0; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.watch_conditions
+    ADD CONSTRAINT fk_rails_4701996be0 FOREIGN KEY (created_by_id) REFERENCES public.users(id);
 
 
 --
@@ -2131,11 +2355,27 @@ ALTER TABLE ONLY public.domain_events
 
 
 --
+-- Name: watch_conditions fk_rails_8c8e83d5d7; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.watch_conditions
+    ADD CONSTRAINT fk_rails_8c8e83d5d7 FOREIGN KEY (case_id) REFERENCES public.cases(id);
+
+
+--
 -- Name: cases fk_rails_8ffced78ef; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.cases
     ADD CONSTRAINT fk_rails_8ffced78ef FOREIGN KEY (subject_id) REFERENCES public.subjects(id);
+
+
+--
+-- Name: workflow_actions fk_rails_934b0cf43e; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.workflow_actions
+    ADD CONSTRAINT fk_rails_934b0cf43e FOREIGN KEY (case_id) REFERENCES public.cases(id);
 
 
 --
@@ -2243,6 +2483,14 @@ ALTER TABLE ONLY public.case_events
 
 
 --
+-- Name: workflow_actions fk_rails_ca0f033096; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.workflow_actions
+    ADD CONSTRAINT fk_rails_ca0f033096 FOREIGN KEY (requested_by_id) REFERENCES public.users(id);
+
+
+--
 -- Name: observation_groups fk_rails_caaaf09583; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -2272,6 +2520,14 @@ ALTER TABLE ONLY public.cases
 
 ALTER TABLE ONLY public.cases
     ADD CONSTRAINT fk_rails_d192f7ddcd FOREIGN KEY (owner_id) REFERENCES public.users(id);
+
+
+--
+-- Name: case_dispositions fk_rails_d685bdc944; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.case_dispositions
+    ADD CONSTRAINT fk_rails_d685bdc944 FOREIGN KEY (case_id) REFERENCES public.cases(id);
 
 
 --
@@ -2363,6 +2619,14 @@ ALTER TABLE ONLY public.observations
 
 
 --
+-- Name: case_dispositions fk_rails_fe43aebec9; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.case_dispositions
+    ADD CONSTRAINT fk_rails_fe43aebec9 FOREIGN KEY (organization_id) REFERENCES public.organizations(id);
+
+
+--
 -- Name: intervals fk_rails_ffb9e40026; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -2377,6 +2641,7 @@ ALTER TABLE ONLY public.intervals
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20260809160000'),
 ('20260809140000'),
 ('20260809130000'),
 ('20260809120100'),

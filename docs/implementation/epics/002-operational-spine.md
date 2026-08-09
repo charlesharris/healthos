@@ -69,17 +69,16 @@ Epic 003); S2C-004→017, S2C-023, S2C-025.
 - [ ] 002-14 Reopen logic with domain reopen horizon; history retained
       (S2C-016/017); spec: outside horizon → new Case
 - [ ] 002-15 Correlation explanation persisted per attachment (§158)
-- [ ] 002-16 Priority policy + `priority_reasons` (now/today/routine/
+- [x] 002-16 Priority policy + `priority_reasons` (now/today/routine/
       watch); explanation surface (§43, §159, S2C-011/012)
 - [ ] 002-17 Deterministic routing policy (team/owner) (§44)
 
 ### Lifecycle + queue (Milestone 5)
-- [ ] 002-18 Transition services (Triage / StartInvestigation /
-      StartWatching / Resolve / Dismiss); controllers never mutate Case
-      state directly (S2C-013)
-- [ ] 002-19 Watch conditions (time_elapsed, new_observation_count,
-      new_signal, threshold_crossed) + evaluation job (§45)
-- [ ] 002-20 Dispositions with §46 code list; resolution requires one
+- [x] 002-18 `Cases::Transition` with an explicit legality table;
+      controllers never mutate Case state directly (S2C-013)
+- [~] 002-19 Watch conditions + satisfaction predicates (§45); the
+      periodic evaluation job lands with 002-21's queue work
+- [x] 002-20 Dispositions with §46 code list; resolution requires one
       (S2C-015)
 - [ ] 002-21 Ops Queue v1: tabs/counts, filters, sort (priority → age →
       detected_at), assignment, pagination, Turbo row refresh (§85–87)
@@ -110,6 +109,48 @@ land), bulk clinical actions.
       under concurrency, no hidden source changes
 
 ## Decision Log
+
+### 2026-08-09 — 002-16, 002-18 to 002-20 case lifecycle
+
+**Priority deliberately cannot see evidence.** S2C-011 says priority is
+operational policy, not statistical evidence, and the easiest way to
+violate it is to reach for `evidence_level` when deciding urgency. A
+STRONG Difference does not make a Case urgent and a WEAK one does not
+make it ignorable — urgency is how soon a human should look, which
+depends on the kind of work and how long it has waited. A spec greps
+`priority_policy.rb` and fails on `evidence_level`, `STRONG` or
+`MODERATE`, because coupling the two axes is how you end up with the
+"AI Risk Score: 87" that HO §43 and CLAUDE.md both forbid.
+
+**A policy bug found by spec, and it was a naming lie.** The rule was
+called `aged_unreviewed` but only checked age. So a Case an operator had
+already reviewed and parked would be escalated for the crime of still
+existing — and worse, an `insufficient_evidence` Case being watched for
+more data ages *by design*, so the rule punished exactly the honest
+answer STAT-036 asks for and pushed toward closing Cases to keep the
+queue quiet. Now checks `last_reviewed_at.nil?`, and the
+insufficient-evidence branch is evaluated first.
+
+**Reopening is not a transition.** `resolved` and `dismissed` have empty
+allowed-transition lists, so a manual resolved→investigating is refused
+with a message pointing at S2C-016. Reopening requires a new compatible
+Signal and therefore belongs to correlation — allowing it here would
+reopen a Case with no evidence behind it.
+
+**Dispositions are refused, never defaulted** (S2C-015). A disposition
+the system invented would corrupt HO §43's resolution feedback loop:
+every "action taken" that nobody took makes monitor quality look better
+than it is. Codes are constrained at the database, per HO §46's warning
+against arbitrary customer taxonomies.
+
+**Disposition is a record, not a column**, so a reopened Case keeps its
+prior one visible (S2C-016). A column would be overwritten on the second
+resolution.
+
+**`threshold_crossed` watch conditions deliberately never self-satisfy.**
+Evaluating the threshold here would duplicate a governed value that
+already belongs to a monitor. The condition records the intent; the
+monitor owns the number.
 
 ### 2026-08-09 — 002-04 to 002-06 measurement-behaviour signals
 
