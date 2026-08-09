@@ -65,6 +65,7 @@ module Ops
                   trigger_attachments: detail.trigger_attachments,
                   other_attachments: detail.other_attachments,
                   timeline: detail.timeline,
+                  timeline_truncated: detail.timeline_truncated?,
                   telemetry: detail.telemetry_profile(
                     semantic_key: params[:key].presence,
                     selection: TelemetryProfileQuery::Selection.from_params(params)

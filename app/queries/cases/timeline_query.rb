@@ -15,6 +15,10 @@ module Cases
   class TimelineQuery < Tenanted::Query
     Entry = Struct.new(:at, :kind, :summary, :detail, :record_id, :record_type, keyword_init: true)
 
+    # Rows read from `observations`, not entries emitted. One measurement event
+    # of systolic + diastolic + pulse is three rows and one entry.
+    OBSERVATION_ROW_LIMIT = 400
+
     def initialize(organization:, case_record:, membership: nil, window: nil)
       super(organization: organization, membership: membership)
       @case_record = case_record
@@ -28,6 +32,13 @@ module Cases
       # the same instant do not swap places between renders. A timeline that
       # reorders itself is one a reader cannot trust.
       entries.sort_by { |e| [ e.at, e.kind, e.record_id.to_s ] }
+    end
+
+    # The reading cap is real and has to be visible. A timeline that silently
+    # stops at 400 rows reads as "this is everything that happened", which is
+    # the one thing a history must never imply.
+    def truncated?
+      observation_rows.length >= OBSERVATION_ROW_LIMIT
     end
 
     private
@@ -64,21 +75,71 @@ module Cases
     # drawn from on the same axis as the operational events. Bounded, because
     # a year of daily readings would bury the workflow entries the timeline
     # exists to show.
-    def observations
-      relation = Observation
-        .where(organization_id: organization.id, subject_id: @case_record.subject_id)
-        .order(observed_at: :desc)
-        .limit(200)
-      relation = relation.where(observed_at: @window.first...@window.last) if @window
+    #
+    # Emitted as MEASUREMENT EVENTS rather than as rows. Systolic, diastolic
+    # and pulse recorded together are one measurement, not three independent
+    # observations (STAT-004/005) — and rendering them as three lines was not
+    # merely verbose, it asserted a cadence the subject did not have. On the
+    # demo Case it turned 21 measurements into 63 rows and buried all three
+    # workflow entries underneath them.
+    def observation_rows
+      @observation_rows ||= begin
+        relation = Observation
+          .where(organization_id: organization.id, subject_id: @case_record.subject_id)
+          .order(observed_at: :desc)
+          .limit(OBSERVATION_ROW_LIMIT)
+        relation = relation.where(observed_at: @window.first...@window.last) if @window
 
-      relation.map do |observation|
-        Entry.new(
-          at: observation.observed_at, kind: "observation",
-          summary: observation.observed? ? "#{observation.semantic_key} #{observation.value_numeric}" : observation.quality_state,
-          detail: { "quality_state" => observation.quality_state, "unit" => observation.unit },
-          record_id: observation.id, record_type: "Observation"
-        )
+        relation.to_a
       end
+    end
+
+    def observations
+      # Grouped by the recorded measurement event where there is one, and by
+      # instant where there is not — a source that does not group its readings
+      # still took them together.
+      observation_rows
+        .group_by { |row| row.observation_group_id || row.observed_at }
+        .map { |_, rows| measurement_entry(rows) }
+    end
+
+    # The order a measurement's readings are listed in, asked of the domain
+    # packs rather than decided here (INV-35). Sorting the keys alphabetically
+    # printed "diastolic 70 · systolic 128", which is backwards from how every
+    # clinician writes a blood pressure and reads as a transcription error.
+    def key_order
+      @key_order ||= Analysis::ContextDefinition.declared_key_order
+    end
+
+    def measurement_entry(rows)
+      first = rows.min_by(&:observed_at)
+      observed, absent = rows.partition(&:observed?)
+
+      summary =
+        if observed.any?
+          observed
+            .sort_by { |row| [ key_order.index(row.semantic_key) || key_order.length, row.semantic_key ] }
+            .map { |row| "#{row.semantic_key.split('.').last.tr('_', ' ')} #{row.value_numeric.to_f.round(1)}" }
+            .join(" · ")
+        else
+          # STAT-002/010: an absent measurement is a state from the taxonomy,
+          # never a zero and never a blank.
+          absent.map(&:quality_state).uniq.join(", ")
+        end
+
+      Entry.new(
+        at: first.observed_at, kind: "observation", summary: summary,
+        # Method stays because a change in it is the thing STAT-003 exists to
+        # make visible. Reading count and units do not: the count is already
+        # legible from the values listed in the summary, and the units came
+        # out in whatever order the rows arrived, so consecutive identical
+        # measurements rendered "bpm, mmHg" then "mmHg, bpm" and read as a
+        # difference in the data.
+        detail: { "method" => observed.filter_map(&:recording_method).uniq.sort.join(", ").presence,
+                  "missing" => absent.map(&:quality_state).uniq.sort.join(", ").presence }.compact,
+        record_id: first.observation_group_id || first.id,
+        record_type: first.observation_group_id ? "ObservationGroup" : "Observation"
+      )
     end
 
     def dispositions

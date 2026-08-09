@@ -36,11 +36,11 @@ module Ops
       signal_attachments.reject { |attachment| attachment.relationship == "trigger" }
     end
 
-    def timeline
-      Cases::TimelineQuery.new(
-        organization: organization, membership: membership, case_record: resolve
-      ).resolve
-    end
+    def timeline = timeline_query.resolve
+
+    # Surfaced so the view can say the reading cap was hit. A history that
+    # stops silently reads as "this is everything that happened".
+    def timeline_truncated? = timeline_query.truncated?
 
     # The windows the picture is drawn over.
     #
@@ -67,6 +67,12 @@ module Ops
     end
 
     private
+
+    def timeline_query
+      @timeline_query ||= Cases::TimelineQuery.new(
+        organization: organization, membership: membership, case_record: resolve
+      )
+    end
 
     # Which measure to plot first, asked of the domain pack rather than
     # decided here — platform core contains no disease-specific assumption

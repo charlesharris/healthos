@@ -10,7 +10,19 @@
     handle — never a name, never an MRN (HO §84, §92).
 
     Locals: case_record, trigger_attachments, other_attachments, timeline,
-    telemetry, drawer. %>
+    timeline_truncated, telemetry, drawer. %>
+<%# Two paths, because they want different things carried.
+
+    `chart_path` is the bare Case with the chosen measure: the chart's own
+    Reset link builds on it and must NOT inherit a selection.
+
+    `review_path` carries whatever is currently selected, so changing the
+    timeline filter does not silently throw away the region being examined. %>
+<% chart_path = { controller: "/ops/cases", action: "show", id: case_record.id } %>
+<% chart_path = chart_path.merge(key: telemetry.semantic_key) if telemetry&.semantic_key %>
+<% review_path = telemetry && !telemetry.selection.from_signal? ?
+                   chart_path.merge(telemetry.selection.to_params) : chart_path %>
+
 <div class="<%= class_names("review", "review-drawer" => drawer) %>">
   <header class="review-head">
     <div class="row-wrap">
@@ -49,7 +61,7 @@
             <h2 class="section-title">Distribution</h2>
             <%= render "ops/cases/distribution",
                        profile: telemetry,
-                       base_path: { controller: "/ops/cases", action: "show", id: case_record.id },
+                       base_path: chart_path.except(:key),
                        key_param: :key,
                        frame_id: drawer ? "case_drawer" : nil %>
           </section>
@@ -225,25 +237,13 @@
           drawer, or on a narrow page — the actions come before the history.
           On a wide page CSS puts it back under the evidence. %>
       <div class="review-history">
-        <section class="section">
-          <h2 class="section-title">Timeline</h2>
-
-          <%# HO §90: observations, signals, case events, dispositions and
-              workflow actions on one axis, newest last. Read-only over
-              append-only sources. %>
-          <ol class="timeline">
-            <% timeline.each do |entry| %>
-              <li>
-                <span class="at"><%= l(entry.at.in_time_zone, format: :short) %></span>
-                <span class="what">
-                  <span class="kind"><%= entry.kind.humanize %></span>
-                  <span class="summary"><%= entry.summary %></span>
-                  <%= timeline_detail(entry.detail) %>
-                </span>
-              </li>
-            <% end %>
-          </ol>
-        </section>
+        <%= render "ops/cases/timeline",
+                   entries: timeline,
+                   truncated: timeline_truncated,
+                   base_path: review_path,
+                   filter_param: :tl,
+                   filter: timeline_filter(params[:tl]),
+                   frame_id: drawer ? "case_drawer" : nil %>
       </div>
     </div>
   </div>

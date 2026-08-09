@@ -112,6 +112,46 @@ land), bulk clinical actions.
 
 ## Decision Log
 
+### 2026-08-09 — the timeline was 63 lines of arriving and 3 of happening
+
+HO §90 asks for observations, signals, case events, dispositions and workflow
+actions on one axis. It got them, and the result was unreadable: on a Case
+with three weeks of daily readings the timeline was 66 entries, 63 of them
+readings, so "what happened to this Case" — the only question the timeline
+exists to answer — could not be seen without scrolling past everything that
+merely *arrived*.
+
+Three changes, each reversible by the reader, because a history that hides
+things is worse than a long one:
+
+**Readings are emitted as measurement events, not rows.** Systolic, diastolic
+and pulse recorded together are one measurement (STAT-004/005), and rendering
+them as three lines was not merely verbose — it asserted a cadence the subject
+did not have. 63 rows became 21.
+
+**Runs of consecutive measurements fold.** The row states its own size ("21
+measurements over 21 days") and opens in place. *Consecutive* is doing the
+work: nothing happened between them, so a fold cannot hide an operational
+entry. 21 became 1, and the timeline now opens on the Signal and the Case
+creation.
+
+**A filter, as a URL.** Everything / Workflow / Signals / Readings with counts,
+the same linkable-and-audited pattern as the chart selection. Asking for
+Readings deliberately turns folding off — the reader asked for the rows.
+
+Two smaller things, both of which made identical data look different:
+
+* the reading cap (previously a silent `limit(200)`) now announces itself. A
+  timeline that stops without saying so reads as "this is everything that
+  happened", which is the one thing a history must never imply.
+* readings were sorted alphabetically, printing "diastolic 70 · systolic 128"
+  — backwards from how every clinician writes a blood pressure, and it reads
+  as a transcription error. Now ordered by the domain pack's declared key
+  order, via the same `ContextDefinition.declared_key_order` the chart uses.
+  Units were dropped from the per-row detail for the same class of reason:
+  `uniq` over unordered rows printed "bpm, mmHg" then "mmHg, bpm" on
+  consecutive identical measurements.
+
 ### 2026-08-09 — drag-to-select, and a cohort Explore surface
 
 **The selection is a URL, not client state.** Releasing the pointer navigates.

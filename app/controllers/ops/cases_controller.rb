@@ -54,6 +54,7 @@ module Ops
       @trigger_attachments = detail.trigger_attachments
       @other_attachments = detail.other_attachments
       @timeline = detail.timeline
+      @timeline_truncated = detail.timeline_truncated?
 
       # Descriptive only, and explicitly not an analytical artifact — see
       # TelemetryProfileQuery. `semantic_key` lets an operator switch which

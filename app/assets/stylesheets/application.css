@@ -1233,6 +1233,53 @@ html.drawer-open .main { padding-right: calc(var(--drawer-w) + 1.5rem); }
 .timeline .detail-key { color: var(--text-muted); }
 .timeline .detail .sep { color: var(--border-strong); }
 
+/* A filter above the timeline, not a page-level tab strip. */
+.tabs-inline { border-bottom: 0; margin-bottom: 0.4rem; gap: 0.1rem; }
+.tabs-inline .tab { font-size: 0.75rem; padding: 0.2rem 0.45rem; border-bottom-width: 1px; }
+
+/* Operational entries are what the timeline exists to show, so they carry the
+   weight; measurements are the background they happened against. */
+.timeline-case_event .summary,
+.timeline-disposition .summary,
+.timeline-workflow_action .summary { font-weight: 600; }
+
+.timeline-signal::before { background: var(--viz-selection); }
+.timeline-case_event::before,
+.timeline-disposition::before { background: var(--accent); }
+
+/* A folded run of consecutive measurements. Opens in place; nothing about it
+   is hidden, only collapsed. */
+.timeline-run > .what > summary {
+  cursor: pointer;
+  list-style: none;
+  display: flex;
+  align-items: baseline;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+.timeline-run > .what > summary::-webkit-details-marker { display: none; }
+.timeline-run > .what > summary::after {
+  content: "▸";
+  color: var(--text-faint);
+  font-size: 0.6875rem;
+}
+.timeline-run > .what[open] > summary::after { content: "▾"; }
+.timeline-run > .what > summary:hover { color: var(--accent); }
+.timeline-run .summary { color: var(--text-secondary); }
+
+.timeline-nested {
+  margin: 0.4rem 0 0.2rem;
+  border-left: 0;
+  padding-left: 0;
+}
+.timeline-nested li {
+  border-left: 1px solid var(--border);
+  padding-top: 0.2rem;
+  padding-bottom: 0.2rem;
+  font-size: 0.75rem;
+}
+.timeline-nested li::before { display: none; }
+
 .actions-group { margin-bottom: 0.9rem; }
 .actions-group form { margin: 0 0 0.35rem; }
 .actions-group .btn { width: 100%; }

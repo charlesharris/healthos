@@ -1,0 +1,91 @@
+<%# The Case timeline (HO §90).
+
+    Observations, signals, case events, dispositions and workflow actions on
+    one axis, newest last. Read-only over append-only sources: nothing here
+    writes, reorders, or drops an entry.
+
+    Two things make it readable without making it dishonest:
+
+      · readings arrive as MEASUREMENT EVENTS, not rows — systolic, diastolic
+        and pulse taken together are one measurement (STAT-004/005), and three
+        lines asserted a cadence the subject did not have;
+
+      · runs of CONSECUTIVE measurements fold into one row that states its own
+        size and opens in place. Consecutive means nothing else happened
+        between them, so a fold can never hide an operational entry.
+
+    Locals: entries, truncated, base_path, filter_param, filter, frame_id. %>
+<% counts = timeline_counts(entries) %>
+<% visible = filter_timeline(entries, filter) %>
+
+<section class="section">
+  <h2 class="section-title">Timeline</h2>
+
+  <nav class="tabs tabs-inline" aria-label="Timeline filter">
+    <% TimelineHelper::FILTERS.each do |key, definition| %>
+      <%= link_to "#{definition[:label]} (#{counts[key]})",
+                  url_for(base_path.merge(filter_param => key)),
+                  class: class_names("tab", "is-active" => key == filter,
+                                            "is-empty" => counts[key].zero?),
+                  data: { turbo_frame: frame_id || "_top" } %>
+    <% end %>
+  </nav>
+
+  <% if visible.empty? %>
+    <p class="note">Nothing of this kind on this Case yet.</p>
+  <% else %>
+    <ol class="timeline">
+      <% fold_timeline(visible, filter).each do |item| %>
+        <% if item.is_a?(TimelineHelper::Run) %>
+          <li class="timeline-run">
+            <span class="at">
+              <%= l(item.first_at.in_time_zone, format: :short) %>
+            </span>
+            <details class="what">
+              <summary>
+                <span class="kind">measurements</span>
+                <span class="summary">
+                  <strong><%= pluralize(item.length, "measurement") %></strong>
+                  over <%= pluralize(item.days, "day") %>,
+                  to <%= l(item.last_at.in_time_zone, format: :short) %>
+                </span>
+              </summary>
+
+              <ol class="timeline timeline-nested">
+                <% item.entries.each do |entry| %>
+                  <li>
+                    <span class="at"><%= l(entry.at.in_time_zone, format: :short) %></span>
+                    <span class="what">
+                      <span class="summary"><%= entry.summary %></span>
+                      <%= timeline_detail(entry.detail) %>
+                    </span>
+                  </li>
+                <% end %>
+              </ol>
+            </details>
+          </li>
+        <% else %>
+          <li class="timeline-<%= item.kind %>">
+            <span class="at"><%= l(item.at.in_time_zone, format: :short) %></span>
+            <span class="what">
+              <span class="kind"><%= timeline_kind_label(item.kind) %></span>
+              <span class="summary"><%= item.summary %></span>
+              <%= timeline_detail(item.detail) %>
+            </span>
+          </li>
+        <% end %>
+      <% end %>
+    </ol>
+
+    <%# No silent caps. A timeline that stops at 400 rows without saying so
+        reads as "this is everything that happened". %>
+    <% if truncated %>
+      <p class="note">
+        Older readings are not shown — this covers the most recent
+        <%= Cases::TimelineQuery::OBSERVATION_ROW_LIMIT %> of them. Every
+        reading remains in the record; the chart above is drawn from all of
+        them.
+      </p>
+    <% end %>
+  <% end %>
+</section>
