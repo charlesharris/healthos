@@ -44,11 +44,12 @@ Epic 003); S2C-004→017, S2C-023, S2C-025.
 - [~] 002-03 Completeness with explicit denominators (STAT-011) —
       `Measurement::Completeness` done; completeness_delta derived
       signal lands with 002-04's derivation batch
-- [ ] 002-04 Measurement-frequency, days_since_last,
+- [x] 002-04 Measurement-frequency, days_since_last,
       manual_entry_frequency derived signals (§29)
-- [ ] 002-05 Source-change + recording-method-change derivation using
+- [x] 002-05 Source-change + recording-method-change derivation using
       `devices` transitions (§20, STAT-003)
-- [ ] 002-06 Short-window BP summary + BP variability derived signals
+- [x] 002-06 BP variability derived signal (short-window BP summary is
+      the 001-09 daily summary over a narrower window — no new algorithm)
 
 ### Monitor pack breadth (Milestone 3)
 - [ ] 002-07 Threshold-excursion monitor (fixture thresholds,
@@ -109,6 +110,43 @@ land), bulk clinical actions.
       under concurrency, no hidden source changes
 
 ## Decision Log
+
+### 2026-08-09 — 002-04 to 002-06 measurement-behaviour signals
+
+**`SourceProfile` reports the source MIX, never a boolean.** "The source
+changed" cannot feed SC §11, whose thresholds are *proportions* — 30%
+caps biological evidence at WEAK, 50% suppresses it. A true/false would
+throw away exactly the number the gate needs, so the derived signal
+carries `changed_share` alongside the boolean.
+
+**And it encodes no threshold of its own.** A spec reads
+`source_profile.rb`, strips comments, and fails on any occurrence of
+`0.3`, `0.5`, `30` or `50`. The 30/50 boundaries are SC §11's and belong
+to the evidence gate in 003-15. This is the fourth time a governed value
+could have been buried in a derivation; the spec makes it the last.
+
+**An empty window is indeterminate, not "no change".** A false "source
+stable" would let a biological reading through unqualified, which is
+precisely what STAT-007's instrumentation-before-biology ordering exists
+to prevent.
+
+**`days_since_last` returns `insufficient_input`, never a large number**,
+when nothing was recorded. "Infinity days since last" is a different
+claim from "no reading in this window", and a numeric stand-in would be
+zero-imputation's cousin (STAT-002).
+
+**MAD rather than standard deviation** for variability (SC §29). Specced
+against readings whose SD is ~43 and whose MAD is 2 — the outlier moves
+one by an order of magnitude and barely touches the other.
+
+**002-06 needed no new algorithm.** A "short-window BP summary" is the
+001-09 daily summary evaluated over a narrower window; adding a second
+algorithm would have meant two versioned digests computing the same
+thing, and reproducibility gets worse rather than better.
+
+Two of my own arithmetic errors are worth noting since both were in
+specs rather than code: a MAD I computed as 4 that is actually 2, and a
+frequency I expected unrounded when the algorithm rounds to 4dp.
 
 ### 2026-08-09 — 002-01 to 002-03 measurement semantics
 
