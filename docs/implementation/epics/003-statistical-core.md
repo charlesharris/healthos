@@ -50,13 +50,13 @@ STAT-001, 004–009, 012–030, 036–042; S2C-018/019.
       instrument._
 
 ### Context (Milestone 6)
-- [ ] 003-02 ContextDefinition interface (§51) + versioning/digest
+- [x] 003-02 ContextDefinition interface (§51) + versioning/digest
 - [x] 003-03 `contexts` + `context_values` (row-per-dimension typed,
       §52–53) with family metadata columns (semantic/source/derivation)
       (STAT-031)
-- [ ] 003-04 Context materializer with input EvidenceSet + fingerprint;
+- [x] 003-04 Context materializer with input EvidenceSet + fingerprint;
       operational vs interactive modes (§54)
-- [ ] 003-05 Hypertension `blood_pressure_change` ContextDefinition v1
+- [x] 003-05 Hypertension `blood_pressure_change` ContextDefinition v1
 
 ### Baseline (Milestone 6)
 - [ ] 003-06 BaselineDefinition config model (§56): eligibility,
@@ -65,7 +65,7 @@ STAT-001, 004–009, 012–030, 036–042; S2C-018/019.
       source_summary, evidence set (§57)
 - [ ] 003-08 `personal_recent` baseline v1 with generic minimums
       (10 usable days / 14-day span; targets 21/28) (STAT-016/017)
-- [ ] 003-09 Version tuple + fingerprint capture on all artifacts (§80)
+- [x] 003-09 Version tuple + fingerprint capture on all artifacts (§80)
 - [ ] 003-10 Late-data invalidation: overlap detection →
       analysis_status=stale → CaseEvent → coordinator re-run;
       over-invalidation acceptable (§55); saved artifacts untouched
@@ -129,6 +129,51 @@ baseline types beyond personal_recent (phase/cycle/expected-trajectory
 land when a domain needs them — keep BaselineDefinition general).
 
 ## Decision Log
+
+### 2026-08-09 — 003-02/04/05/09 Context materialization
+
+**The Context emits measurement behaviour beside biology, deliberately.**
+A definition that produced only blood pressure would make STAT-007's
+instrumentation-before-biology ordering impossible — the comparison
+engine would have nothing to order against. Completeness and
+source-change are materialized as first-class dimensions (STAT-003), not
+attached as annotations.
+
+**A dimension with nothing usable is EMITTED, not omitted**, carrying no
+value. That is what lets a Comparison distinguish "we looked and found
+nothing usable" from "we never looked" — omitting it would collapse the
+two, and the second is not a gap while the first is.
+
+**The CHECK constraint caught me putting metadata in a value column.**
+`{"source_count" => 0}` on an `unknown` dimension tripped the
+value-representation constraint. Relaxing the CHECK to admit `value_json`
+would have been the easy fix and the wrong one: it would let a real value
+be smuggled onto a missing dimension under a different column name.
+Added a `details` jsonb column instead — always permitted, never a value
+— so STAT-042's structured reason codes have a home and the invariant
+stays absolute.
+
+**A knowable zero is not an unknowable ratio.** A subject who was
+expected to measure daily and measured nothing has a genuine 0%
+completeness, recorded as `observed`. Only a dimension with no declared
+expectation model is `unknown`. A gate that confused the two would read
+"we could not tell" as "they barely measured" — my own first spec made
+exactly that mistake, asserting nil where 0 was correct.
+
+**Families are read from the semantic registry, never restated.** If a
+definition declared its own, the two could drift and STAT-033's
+correlated-family suppression would be reasoning about families that no
+longer match the data.
+
+**The definition computes but does not judge**, enforced by a spec that
+greps it for `evidence_level|WEAK|MODERATE|STRONG|suppress`. A gate
+hidden in a materializer is a governed threshold nobody reviews.
+
+**The version tuple includes the statistical config digest** (HO §80),
+so a threshold change is visible in the artifact rather than only in git
+history — and stored ON the artifact rather than joined at read time,
+since a join would resolve to today's versions and quietly rewrite what
+the artifact meant.
 
 ### 2026-08-09 — 003-03/007 schema, and governed statistical config
 

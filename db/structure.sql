@@ -214,6 +214,7 @@ CREATE TABLE public.context_values (
     evidence_set_id uuid,
     created_at timestamp(6) without time zone NOT NULL,
     updated_at timestamp(6) without time zone NOT NULL,
+    details jsonb DEFAULT '{}'::jsonb NOT NULL,
     CONSTRAINT context_values_value_representation_check CHECK (((quality_state = 'observed'::text) OR ((value_numeric IS NULL) AND (value_text IS NULL) AND (value_boolean IS NULL) AND (value_json IS NULL))))
 );
 
@@ -2958,6 +2959,7 @@ ALTER TABLE ONLY public.intervals
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20260809190000'),
 ('20260809180000'),
 ('20260809160000'),
 ('20260809140000'),
