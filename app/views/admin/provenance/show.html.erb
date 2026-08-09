@@ -1,0 +1,61 @@
+<h1>Provenance</h1>
+
+<p>
+  <strong><%= @observation.semantic_key %></strong>
+  v<%= @observation.semantic_version %>
+  &mdash;
+  <% if @observation.observed? %>
+    <%= @observation.value_numeric || @observation.value_text || @observation.value_code %>
+    <%= @observation.unit %>
+  <% else %>
+    <em>no value (<%= @observation.quality_state %>)</em>
+  <% end %>
+  at <%= @observation.observed_at %>
+</p>
+
+<h2>Canonical record</h2>
+<table>
+  <% @observation.provenance.each do |field, value| %>
+    <tr><th><%= field.to_s.humanize %></th><td><%= value %></td></tr>
+  <% end %>
+</table>
+
+<% if @siblings.any? %>
+  <h2>Measured together</h2>
+  <p>These were recorded in the same measurement event, so they are one
+     analytical unit rather than several.</p>
+  <ul>
+    <% @siblings.each do |sibling| %>
+      <li>
+        <%= link_to sibling.semantic_key, admin_provenance_path(sibling) %>
+        &mdash; <%= sibling.value_numeric %> <%= sibling.unit %>
+      </li>
+    <% end %>
+  </ul>
+<% end %>
+
+<h2>Raw envelope</h2>
+<table>
+  <tr><th>Public id</th><td><%= @envelope.public_id %></td></tr>
+  <tr><th>Source</th><td><%= @envelope.source.key %> (<%= @envelope.source.source_type %>)</td></tr>
+  <tr><th>Source record</th><td><%= @envelope.source_record_id %> v<%= @envelope.source_record_version || "—" %></td></tr>
+  <tr><th>Adapter</th><td><%= @envelope.adapter_key %>@v<%= @envelope.adapter_version %></td></tr>
+  <tr><th>Received</th><td><%= @envelope.received_at %></td></tr>
+  <tr><th>Object key</th><td><code><%= @envelope.object_key %></code></td></tr>
+  <tr><th>Content hash</th><td><code><%= @envelope.content_hash %></code></td></tr>
+</table>
+
+<h2>Stored payload</h2>
+<% case @integrity %>
+<% when :verified %>
+  <p>Integrity verified: the stored bytes hash to the recorded value.</p>
+  <pre><%= @payload %></pre>
+<% when :failed %>
+  <p><strong>INTEGRITY CHECK FAILED.</strong> The stored payload does not match
+     the hash recorded at ingestion. It is not shown, because evidence that
+     cannot be verified must not be presented as evidence.</p>
+  <pre><%= @integrity_error %></pre>
+<% else %>
+  <p>Payload unavailable.</p>
+  <pre><%= @integrity_error %></pre>
+<% end %>

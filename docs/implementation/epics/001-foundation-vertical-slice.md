@@ -109,12 +109,12 @@ semantics in Epic 002); provenance invariants 1–3.
       expectation model deferred to Epic 002
 
 ### 001-08 Normalizer + provenance
-- [ ] Versioned normalizer interface; synthetic-BP-JSON normalizer v1
-- [ ] Normalization job (thin wrapper), idempotent on
+- [x] Versioned normalizer interface; synthetic-BP-JSON normalizer v1
+- [x] Normalization job (thin wrapper), idempotent on
       RawEnvelope + normalizer version (§96)
-- [ ] Admin provenance drilldown view: canonical BP → raw envelope →
+- [x] Admin provenance drilldown view: canonical BP → raw envelope →
       stored payload
-- [ ] Specs: re-run normalization → no duplicate canonical rows;
+- [x] Specs: re-run normalization → no duplicate canonical rows;
       every observation traces to its envelope (STAT-006 gate fields
       populated; invariants 1–3)
 
@@ -700,3 +700,52 @@ UPDATE and DELETE need separate examples), `save!(validate: false)`
 skips the `before_validation` that assigns `public_id`, and a row with a
 value *and* a non-observed state trips the value-representation CHECK
 before the quality-state one.
+
+### 2026-08-09 — 001-08 normalizer and provenance
+
+**A null reading is recorded, never dropped.** When the payload contains
+`"pulse": null`, the normalizer emits an `invalid_measurement`
+observation carrying no value rather than skipping the field. Dropping
+it would make the gap invisible, and an invisible gap is
+indistinguishable from a measurement that was never expected — exactly
+the collapse STAT-002 and STAT-010 forbid. A non-numeric value is
+handled the same way rather than coerced. Absent-from-payload is
+different again and *is* skipped: whether that constitutes a gap is the
+expectation model's decision in 002-01, not the normalizer's.
+
+**Normalizers return intents, they do not write rows.** The coordinator
+owns the transaction and the idempotency, which keeps a normalizer a
+pure function of its payload and lets mapping logic be specced without
+touching the database.
+
+**Adapter resolution is an explicit lazy map, not self-registration.**
+The first implementation registered each normalizer at the bottom of its
+own file. Under Zeitwerk a class nothing has referenced has not been
+loaded, so that registry is empty until something happens to touch the
+file — behaviour that depends on autoload order. Replaced with an
+explicit `ADAPTERS` constant resolved by `constantize`, matching
+`Outbox::Registry`. The failure surfaced immediately as "no normalizer
+registered for adapter", which is the good version of this mistake.
+
+**The payload is re-verified before it becomes canonical.**
+Normalization reads through the store's hash check (ADR-002 4b), so a
+tampered payload raises rather than producing observations. Specced:
+after tampering, `Observation.count` is zero.
+
+**The provenance drilldown is deliberately not an Administrate
+dashboard.** Health evidence is excluded from generic CRUD by
+`spec/admin/admin_scope_spec.rb`, and "where did this number come from"
+is a task-shaped question a resource index cannot express. It is
+read-only, behind the same staff gate, and writes an
+`admin.provenance.viewed` audit event (HO §92, §157).
+
+**Integrity failure is shown, not hidden.** If the stored bytes no
+longer hash to the recorded value the view renders the failure and
+withholds the payload, because a drilldown that silently displayed
+altered evidence would be worse than one that errors (INV-4, INV-5,
+HO §131). Specced in both directions.
+
+An adapter-key mismatch (`synthetic_json` in the ingestion default
+versus `synthetic_bp_json` in the normalizer) failed 16 specs at once —
+worth noting only because it is the kind of thing that would have been
+a silent no-op had the registry defaulted instead of raising.

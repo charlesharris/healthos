@@ -27,7 +27,7 @@ module Ingestion
     def initialize(source:, payload:, source_record_id:, source_record_version: nil,
                    content_type: "application/json", observed_at: nil,
                    source_modified_at: nil, subject: nil, metadata: {},
-                   adapter_key: "synthetic_json", adapter_version: "1",
+                   adapter_key: "synthetic_bp_json", adapter_version: "1",
                    store: Storage::RawPayloadStore.instance)
       @source = source
       @payload = payload

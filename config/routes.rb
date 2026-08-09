@@ -11,6 +11,10 @@ Rails.application.routes.draw do
       resources :team_memberships
       resources :users
 
+      # Purpose-built evidence tooling (HO §157). Read-only, outside
+      # Administrate — health evidence is excluded from generic CRUD.
+      get "provenance/:id", to: "provenance#show", as: :provenance
+
       root to: "organizations#index"
     end
   resource :session
