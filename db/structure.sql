@@ -224,6 +224,47 @@ CREATE TABLE public.invitations (
 
 
 --
+-- Name: monitor_configurations; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.monitor_configurations (
+    id uuid DEFAULT uuidv7() NOT NULL,
+    organization_id uuid NOT NULL,
+    domain_key text NOT NULL,
+    monitor_key text NOT NULL,
+    monitor_version integer NOT NULL,
+    enabled boolean DEFAULT true NOT NULL,
+    parameters jsonb DEFAULT '{}'::jsonb NOT NULL,
+    routing_parameters jsonb DEFAULT '{}'::jsonb NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL
+);
+
+
+--
+-- Name: monitor_evaluations; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.monitor_evaluations (
+    id uuid DEFAULT uuidv7() NOT NULL,
+    organization_id uuid NOT NULL,
+    subject_id uuid NOT NULL,
+    monitor_key text NOT NULL,
+    monitor_version integer NOT NULL,
+    window_started_at timestamp(6) without time zone NOT NULL,
+    window_ended_at timestamp(6) without time zone NOT NULL,
+    evaluated_at timestamp(6) without time zone NOT NULL,
+    result text NOT NULL,
+    input_fingerprint text,
+    details jsonb DEFAULT '{}'::jsonb NOT NULL,
+    signal_id uuid,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT monitor_evaluations_result_check CHECK ((result = ANY (ARRAY['triggered'::text, 'not_triggered'::text, 'insufficient_data'::text, 'skipped'::text, 'error'::text])))
+);
+
+
+--
 -- Name: observation_groups; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -363,6 +404,34 @@ CREATE TABLE public.sessions (
     user_agent text,
     created_at timestamp(6) without time zone NOT NULL,
     updated_at timestamp(6) without time zone NOT NULL
+);
+
+
+--
+-- Name: signals; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.signals (
+    id uuid DEFAULT uuidv7() NOT NULL,
+    public_id text NOT NULL,
+    organization_id uuid NOT NULL,
+    subject_id uuid NOT NULL,
+    monitor_key text NOT NULL,
+    monitor_version integer NOT NULL,
+    monitor_digest text NOT NULL,
+    signal_type text NOT NULL,
+    domain_key text NOT NULL,
+    detected_at timestamp(6) without time zone NOT NULL,
+    window_started_at timestamp(6) without time zone NOT NULL,
+    window_ended_at timestamp(6) without time zone,
+    severity text DEFAULT 'info'::text NOT NULL,
+    attributes_json jsonb DEFAULT '{}'::jsonb NOT NULL,
+    source_record_type text,
+    source_record_id uuid,
+    deduplication_key text NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT signals_severity_check CHECK ((severity = ANY (ARRAY['info'::text, 'low'::text, 'moderate'::text, 'high'::text])))
 );
 
 
@@ -583,6 +652,22 @@ ALTER TABLE ONLY public.invitations
 
 
 --
+-- Name: monitor_configurations monitor_configurations_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.monitor_configurations
+    ADD CONSTRAINT monitor_configurations_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: monitor_evaluations monitor_evaluations_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.monitor_evaluations
+    ADD CONSTRAINT monitor_evaluations_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: observation_groups observation_groups_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -636,6 +721,14 @@ ALTER TABLE ONLY public.schema_migrations
 
 ALTER TABLE ONLY public.sessions
     ADD CONSTRAINT sessions_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: signals signals_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.signals
+    ADD CONSTRAINT signals_pkey PRIMARY KEY (id);
 
 
 --
@@ -1018,6 +1111,48 @@ CREATE UNIQUE INDEX index_invitations_on_token_digest ON public.invitations USIN
 
 
 --
+-- Name: index_monitor_configurations_identity; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_monitor_configurations_identity ON public.monitor_configurations USING btree (organization_id, monitor_key, monitor_version);
+
+
+--
+-- Name: index_monitor_configurations_on_org_domain_enabled; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_monitor_configurations_on_org_domain_enabled ON public.monitor_configurations USING btree (organization_id, domain_key, enabled);
+
+
+--
+-- Name: index_monitor_configurations_on_organization_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_monitor_configurations_on_organization_id ON public.monitor_configurations USING btree (organization_id);
+
+
+--
+-- Name: index_monitor_evaluations_lookup; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_monitor_evaluations_lookup ON public.monitor_evaluations USING btree (organization_id, subject_id, monitor_key, evaluated_at DESC);
+
+
+--
+-- Name: index_monitor_evaluations_on_organization_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_monitor_evaluations_on_organization_id ON public.monitor_evaluations USING btree (organization_id);
+
+
+--
+-- Name: index_monitor_evaluations_on_subject_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_monitor_evaluations_on_subject_id ON public.monitor_evaluations USING btree (subject_id);
+
+
+--
 -- Name: index_observation_groups_on_org_subject_time; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -1211,6 +1346,41 @@ CREATE INDEX index_raw_envelopes_on_subject_id ON public.raw_envelopes USING btr
 --
 
 CREATE INDEX index_sessions_on_user_id ON public.sessions USING btree (user_id);
+
+
+--
+-- Name: index_signals_on_org_and_dedupe_key; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_signals_on_org_and_dedupe_key ON public.signals USING btree (organization_id, deduplication_key);
+
+
+--
+-- Name: index_signals_on_org_subject_domain_time; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_signals_on_org_subject_domain_time ON public.signals USING btree (organization_id, subject_id, domain_key, detected_at DESC);
+
+
+--
+-- Name: index_signals_on_organization_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_signals_on_organization_id ON public.signals USING btree (organization_id);
+
+
+--
+-- Name: index_signals_on_organization_id_and_public_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_signals_on_organization_id_and_public_id ON public.signals USING btree (organization_id, public_id);
+
+
+--
+-- Name: index_signals_on_subject_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_signals_on_subject_id ON public.signals USING btree (subject_id);
 
 
 --
@@ -1456,6 +1626,14 @@ ALTER TABLE ONLY public.intervals
 
 
 --
+-- Name: signals fk_rails_247f220cd3; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.signals
+    ADD CONSTRAINT fk_rails_247f220cd3 FOREIGN KEY (subject_id) REFERENCES public.subjects(id);
+
+
+--
 -- Name: derived_signals fk_rails_2554361053; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1512,6 +1690,22 @@ ALTER TABLE ONLY public.organization_memberships
 
 
 --
+-- Name: monitor_configurations fk_rails_5aa0891e52; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.monitor_configurations
+    ADD CONSTRAINT fk_rails_5aa0891e52 FOREIGN KEY (organization_id) REFERENCES public.organizations(id);
+
+
+--
+-- Name: monitor_evaluations fk_rails_60bb870f93; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.monitor_evaluations
+    ADD CONSTRAINT fk_rails_60bb870f93 FOREIGN KEY (organization_id) REFERENCES public.organizations(id);
+
+
+--
 -- Name: team_memberships fk_rails_61c29b529e; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1536,6 +1730,14 @@ ALTER TABLE ONLY public.events
 
 
 --
+-- Name: monitor_evaluations fk_rails_64cd3b3e64; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.monitor_evaluations
+    ADD CONSTRAINT fk_rails_64cd3b3e64 FOREIGN KEY (signal_id) REFERENCES public.signals(id);
+
+
+--
 -- Name: evidence_items fk_rails_69ea66f966; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1557,6 +1759,14 @@ ALTER TABLE ONLY public.events
 
 ALTER TABLE ONLY public.raw_envelopes
     ADD CONSTRAINT fk_rails_6b257aa36a FOREIGN KEY (subject_id) REFERENCES public.subjects(id);
+
+
+--
+-- Name: monitor_evaluations fk_rails_6c174689f9; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.monitor_evaluations
+    ADD CONSTRAINT fk_rails_6c174689f9 FOREIGN KEY (subject_id) REFERENCES public.subjects(id);
 
 
 --
@@ -1704,6 +1914,14 @@ ALTER TABLE ONLY public.observation_groups
 
 
 --
+-- Name: signals fk_rails_cebf70b0e3; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.signals
+    ADD CONSTRAINT fk_rails_cebf70b0e3 FOREIGN KEY (organization_id) REFERENCES public.organizations(id);
+
+
+--
 -- Name: invitations fk_rails_d799c974a1; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1798,6 +2016,7 @@ ALTER TABLE ONLY public.intervals
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20260809130000'),
 ('20260809120100'),
 ('20260809120000'),
 ('20260809110300'),

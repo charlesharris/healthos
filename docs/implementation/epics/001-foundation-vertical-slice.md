@@ -127,13 +127,13 @@ semantics in Epic 002); provenance invariants 1–3.
       lineage resolves to exact input observations
 
 ### 001-10 One trajectory monitor → Signal
-- [ ] Monitor interface (§30), `monitor_configurations`,
+- [x] Monitor interface (§30), `monitor_configurations`,
       `monitor_evaluations` (§31–32)
-- [ ] Hypertension trajectory-change monitor v1 (threshold values are
-      NON-CLINICAL fixtures — mark them as such)
-- [ ] `signals` table per §33; dedup key per §34; unique
+- [x] Hypertension trajectory-change monitor v1 (threshold values are
+      NON-CLINICAL fixtures — marked as such)
+- [x] `signals` table per §33; dedup key per §34; unique
       (org, deduplication_key)
-- [ ] Specs: monitor retry → same Signal returned, not duplicated
+- [x] Specs: monitor retry → same Signal returned, not duplicated
       (S2C-002); monitor never touches Case tables (S2C-003); Signal
       immutable (S2C-001)
 
@@ -797,3 +797,53 @@ Zeitwerk: domain pack subdirectories are HO §24 organizational
 categories, not namespaces, so `app/domain_packs/*/*` is collapsed —
 `Hypertension::DailyBloodPressureSummary`, not
 `Hypertension::DerivedSignals::DailyBloodPressureSummary`.
+
+### 2026-08-09 — 001-10 monitor and Signal
+
+**`Signal` had to be namespaced: it is a Ruby core module.** A
+top-level `Signal < ApplicationRecord` never takes the constant —
+references silently resolve to `::Signal` (the one with `Signal.trap`)
+and fail as `NoMethodError` on the model's own class methods. Moved to
+`Monitoring::Signal` in `app/models/monitoring/`, which is where
+CLAUDE.md's architecture said models should live anyway.
+
+**Deviation, recorded rather than fixed in flight:** CLAUDE.md specifies
+`app/models/{identity,telemetry,monitoring,cases,...}/`, and the models
+written before this point are flat (`Observation`, `Subject`,
+`RawEnvelope`, …). Namespacing them all is the right call but is a
+wide-touching rename; doing it mid-epic risks breaking work in progress
+for no functional gain. Worth one focused refactor later.
+
+**S2C-003 is guarded by a source-level spec**, not only by convention:
+it strips comments and then fails if any monitor file mentions Cases or
+correlation at all. Comments are stripped because the monitors discuss
+Cases at length in prose precisely to explain the boundary — matching
+that would make the guard fire on its own documentation.
+
+**Every threshold is a NON-CLINICAL fixture and says so** (HO §175).
+The monitor's docstring states plainly what it does and does not claim:
+it observes that a recent median differs from a preceding one by more
+than a fixture amount and says a human may want to look. It does not
+claim the difference is real, meaningful, or biological — that is the
+evidence-gated comparison engine's job in epic 003. A Signal is a reason
+to look, never a finding.
+
+**`minimum_recent_points` / `minimum_baseline_points` are deliberately
+low and are not sufficiency gates.** The real gates are STAT-012/016/018
+in epic 003. Duplicating them here would put a statistical threshold in
+a place no statistical review would ever look, which is the same trap
+001-09's `MINIMUM_READINGS` avoided.
+
+**Platform core ships no threshold defaults at all** (HO §31: "clinical
+threshold defaults should not be invented by platform core"). A spec
+asserts `Monitoring::Monitor.default_parameters == {}` while the domain
+pack carries the real values, so the rule is enforced rather than
+intended.
+
+**Direction is part of the dedup semantic identity** (HO §34), so a
+reversal is a genuinely new event rather than a duplicate of the
+original rise.
+
+One spec had to be rewritten because it tried to `delete_all` derived
+signals to reshape a scenario — the append-only grants refused it,
+correctly. Replaced with a second subject.
