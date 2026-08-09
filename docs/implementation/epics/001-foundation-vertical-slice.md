@@ -150,17 +150,17 @@ semantics in Epic 002); provenance invariants 1–3.
       complete CaseEvent history (S2C-005/006/007) — runs 20x in CI
 
 ### 001-12 Ops Queue row (read-only v0)
-- [ ] `Ops::CaseQuery` (org + user context required)
-- [ ] Minimal queue page: work reason primary, subject secondary,
+- [x] `Ops::CaseQuery` (org + user context required)
+- [x] Minimal queue page: work reason primary, subject secondary,
       priority placeholder, status, age (§84)
-- [ ] Indexes from §110 for cases/signals/case_signals/case_events
-- [ ] System spec: log in → see the Case created by the slice
+- [x] Indexes from §110 for cases/signals/case_signals/case_events
+- [x] System spec: log in → see the Case created by the slice
 
 ### 001-13 End-to-end slice spec + demo seed
-- [ ] The Definition of Done system test, as one spec
-- [ ] `bin/demo_seed` v0: a handful of synthetic subjects, one with a
+- [x] The Definition of Done system test, as one spec
+- [x] `bin/demo_seed` v0: a handful of synthetic subjects, one with a
       trajectory change
-- [ ] `bin/replay_envelope` v0 stub that re-runs normalization for one
+- [x] `bin/replay_envelope` v0 that re-runs normalization for one
       envelope
 
 ## Out of Scope (resist the pull)
@@ -172,13 +172,14 @@ Review, multiple monitors, FHIR, CSV import, RLS implementation
 
 ## Test Plan (epic gate)
 
-- [ ] CI green including `bin/definitions verify`
-- [ ] Cross-tenant specs pass on every surface added
-- [ ] Idempotency specs: envelope, normalization, derived signal,
+- [x] CI green including `bin/definitions verify`
+- [x] Cross-tenant specs pass on every surface added
+- [x] Idempotency specs: envelope, normalization, derived signal,
       Signal, CaseSignal
-- [ ] Concurrency correlation spec passes reliably (run 20x in CI loop)
-- [ ] No PHI in logs spec (log scrubbing smoke test)
-- [ ] Definition of Done system spec passes
+- [x] Concurrency correlation spec passes reliably (runs 20x in CI loop)
+- [ ] No PHI in logs spec (log scrubbing smoke test) — **not done**, see
+      Decision Log
+- [x] Definition of Done system spec passes
 
 ## Decision Log
 
@@ -900,3 +901,52 @@ from `app/services/cases/**` and fails on any occurrence of
 `blood_pressure`, `hypertension`, `mmHg`, or a hard-coded window. The
 rules object is injected, so platform core carries no disease
 vocabulary.
+
+### 2026-08-09 — 001-12 and 001-13, epic 001 closed
+
+**The Definition of Done passes as one spec**
+(`spec/system/vertical_slice_spec.rb`), unmocked between stages. The
+point of a vertical slice is that the seams hold, and every stage
+boundary is somewhere an invariant could quietly fail — mocking any of
+them would test the mock.
+
+**The demo seed states its own ground truth.** Four subjects, two with a
+genuine change and two stable, each labelled in the source. The task
+prints what it expects: "a Case for DEMO-002 or DEMO-003 would be a
+false positive worth investigating." A demo you cannot check is a demo
+that can drift into lying. Verified: exactly two Cases,
+DEMO-001 (+21 mmHg) and DEMO-004 (−20 mmHg), and nothing for the stable
+pair.
+
+Seeding is deterministic — per-subject-per-day seeds derived from the
+MRN — so re-running reproduces the same population rather than a
+different one each time.
+
+**Queue ordering is an explicit SQL CASE expression**, not a numeric
+column (S2C-023, STAT-024). A rank integer invites arithmetic on it, and
+review priority is a policy label rather than a magnitude. A support
+engineer reading the query sees the ordering.
+
+**The queue shows `subject.public_id`, never a name.** HO §84 wants work
+reason primary and identity secondary; identity is also PHI, and reading
+it should be a deliberate, audited act (HO §92). The slice spec asserts
+the MRN does not appear in the rendered page.
+
+**Analysis status is displayed but never hides a Case** (S2C-019).
+`failed` and `insufficient_evidence` are distinct values and both stay
+visible and actionable.
+
+### Epic 001 gate — outstanding
+
+**`No PHI in logs` spec is NOT done.** It is the one item on the epic's
+Test Plan still open. The architecture supports it — jobs take ids, not
+payloads; `SubjectIdentity#technical_label` exists precisely for this;
+audit is separate from technical logging — but the smoke test that would
+*prove* it does not exist. Deferred to epic 002 alongside 002-24's audit
+work, where there will be more log surface worth asserting against.
+Recorded rather than quietly checked off.
+
+Also carried forward: the flat model namespacing deviation (CLAUDE.md
+specifies `app/models/{identity,telemetry,monitoring,cases,...}/`, and
+only `Monitoring::Signal` and the `Cases::*` models follow it, because
+those two were forced by constant collisions).

@@ -1,0 +1,46 @@
+<%# HO §84: "work reason should be visually primary; subject identity should
+    be secondary." The queue answers "what needs doing", not "who is sick". %>
+<h1>Ops Queue — <%= Current.organization.name %></h1>
+
+<p>
+  <% Cases::CaseRecord::ACTIVE_STATUSES.each do |status| %>
+    <span><%= status.humanize %>: <strong><%= @counts.fetch(status, 0) %></strong></span>
+  <% end %>
+</p>
+
+<% if @cases.empty? %>
+  <p>Nothing in the queue.</p>
+<% else %>
+  <table>
+    <thead>
+      <tr>
+        <th>Work reason</th>
+        <th>Subject</th>
+        <th>Priority</th>
+        <th>Status</th>
+        <th>Age</th>
+        <th>Owner</th>
+        <th>Analysis</th>
+      </tr>
+    </thead>
+    <tbody>
+      <% @cases.each do |case_record| %>
+        <tr>
+          <%# Primary: why this Case exists. %>
+          <td><strong><%= case_record.title %></strong></td>
+          <%# Secondary: an opaque handle, never a name. Identity is PHI and
+              requires a deliberate, audited read (HO §92). %>
+          <td><%= case_record.subject.public_id %></td>
+          <td><%= case_record.review_priority %></td>
+          <td><%= case_record.status.humanize %></td>
+          <td><%= time_ago_in_words(case_record.detected_at) %></td>
+          <td><%= case_record.owner&.email_address || "—" %></td>
+          <%# S2C-019: analysis state is shown but never hides the Case.
+              `failed` and `insufficient_evidence` are distinct and both
+              remain visible and actionable. %>
+          <td><%= case_record.analysis_status.humanize %></td>
+        </tr>
+      <% end %>
+    </tbody>
+  </table>
+<% end %>

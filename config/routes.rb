@@ -27,11 +27,16 @@ Rails.application.routes.draw do
   get  "no-access",             to: "organizations#no_access", as: :no_access
   get  "members",               to: "organizations#members", as: :members
 
+  # The Ops Queue — the daily product surface (HO §84).
+  namespace :ops do
+    resources :cases, only: %i[index]
+  end
+
   resources :invitations, only: %i[index create]
   get  "invitations/accept/:token", to: "invitations#show",   as: :accept_invitation
   post "invitations/accept",        to: "invitations#accept"
 
-  root "organizations#members"
+  root "ops/cases#index"
 
   # Reveal health status on /up that returns 200 if the app boots with no exceptions, otherwise 500.
   # Can be used by load balancers and uptime monitors to verify that the app is live.

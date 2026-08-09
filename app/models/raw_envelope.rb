@@ -11,6 +11,13 @@ class RawEnvelope < ApplicationRecord
   belongs_to :source
   belongs_to :subject, optional: true
 
+  # The downward half of provenance: what this envelope produced. INV-4 wants
+  # a Finding to drill down to source records; this is the same edge read in
+  # the other direction, which is what makes "what did this payload become?"
+  # answerable during support work (HO §157).
+  has_many :observations, dependent: :restrict_with_error
+  has_many :observation_groups, dependent: :restrict_with_error
+
   validates :source_record_id, :content_type, :object_key, :content_hash,
     :received_at, :adapter_key, :adapter_version, presence: true
   validates :public_id, presence: true, uniqueness: { scope: :organization_id }

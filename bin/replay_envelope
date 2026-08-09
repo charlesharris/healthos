@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+# Re-run normalization for one raw envelope (HO §126, §155).
+#
+#   bin/replay_envelope env_abc123
+set -euo pipefail
+cd "$(dirname "$0")/.."
+if [ $# -lt 1 ]; then
+  echo "usage: bin/replay_envelope <envelope_public_id>" >&2
+  exit 2
+fi
+exec bin/rails "demo:replay[$1]"
