@@ -1,10 +1,264 @@
 /*
- * This is a manifest file that'll be compiled into application.css.
+ * Healthos — a single hand-written stylesheet, no framework.
  *
- * With Propshaft, assets are served efficiently without preprocessing steps. You can still include
- * application-wide styles in this file, but keep in mind that CSS precedence will follow the standard
- * cascading order, meaning styles declared later in the document or manifest will override earlier ones,
- * depending on specificity.
+ * Deliberately restrained. This is a provider tool where the content is
+ * dense, mostly tabular, and read under time pressure; decoration competes
+ * with the data. The job here is legibility and hierarchy, not personality.
  *
- * Consider organizing styles into separate files for maintainability.
+ * The one visual rule that carries product meaning: HO §84 says work reason
+ * is primary and subject identity secondary. That is expressed in type
+ * weight and colour rather than in layout, so it survives a table with many
+ * columns.
  */
+
+:root {
+  --bg: #fbfbfa;
+  --surface: #ffffff;
+  --border: #e2e0dc;
+  --border-strong: #c9c6c0;
+  --text: #1c1b19;
+  --text-muted: #6b6862;
+  --text-faint: #9a968e;
+  --accent: #1f5c8b;
+  --accent-soft: #eaf1f7;
+  --danger: #a8342a;
+  --danger-soft: #fbeceb;
+  --ok: #2f6b46;
+  --ok-soft: #ebf3ee;
+  --warn: #8a5a11;
+  --warn-soft: #fbf2e2;
+  --radius: 6px;
+  --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #17181a;
+    --surface: #1e2023;
+    --border: #32353a;
+    --border-strong: #464a51;
+    --text: #e8e6e3;
+    --text-muted: #a4a19b;
+    --text-faint: #74716b;
+    --accent: #7fb3d9;
+    --accent-soft: #1c2c38;
+    --danger: #e2867c;
+    --danger-soft: #33201e;
+    --ok: #86c39d;
+    --ok-soft: #1c2b22;
+    --warn: #d9ab63;
+    --warn-soft: #302719;
+  }
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  padding: 2rem 2.5rem 4rem;
+  background: var(--bg);
+  color: var(--text);
+  font: 15px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1 { font-size: 1.4rem; font-weight: 600; margin: 0 0 0.35rem; letter-spacing: -0.01em; }
+h2 { font-size: 1.05rem; font-weight: 600; margin: 2rem 0 0.6rem; }
+h3 { font-size: 0.95rem; font-weight: 600; margin: 1.2rem 0 0.4rem; }
+p  { margin: 0.4rem 0; }
+a  { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+code, pre, .mono { font-family: var(--mono); font-size: 0.85em; }
+pre {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.85rem 1rem;
+  overflow-x: auto;
+}
+
+/* ---- Tables: the queue and every evidence listing ---------------------- */
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0.75rem 0 1.25rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+th {
+  text-align: left;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  padding: 0.6rem 0.85rem;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+td {
+  padding: 0.7rem 0.85rem;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+}
+
+tbody tr:last-child td { border-bottom: none; }
+tbody tr:hover { background: var(--accent-soft); }
+
+/* HO §84: work reason primary, subject identity secondary. */
+td strong { font-weight: 600; }
+td .subject-handle,
+td code { color: var(--text-muted); font-size: 0.82rem; }
+
+/* Key/value tables (provenance, evidence inspector) read better narrow. */
+table.detail th { width: 15rem; text-transform: none; letter-spacing: 0; font-size: 0.82rem; }
+
+/* ---- Forms -------------------------------------------------------------- */
+
+input[type="text"], input[type="email"], input[type="password"],
+input[type="search"], select, textarea {
+  font: inherit;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  padding: 0.5rem 0.65rem;
+  width: 100%;
+  max-width: 26rem;
+}
+
+input:focus, select:focus, textarea:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+  border-color: var(--accent);
+}
+
+label { display: block; font-size: 0.8rem; font-weight: 600; color: var(--text-muted); margin-bottom: 0.25rem; }
+
+input[type="submit"], button, .button {
+  font: inherit;
+  font-weight: 500;
+  cursor: pointer;
+  background: var(--accent);
+  color: #fff;
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  padding: 0.45rem 0.9rem;
+  width: auto;
+}
+
+input[type="submit"]:hover, button:hover { filter: brightness(1.08); }
+
+/* Secondary actions sit inside dense rows; they must not shout. */
+td button, td input[type="submit"] {
+  background: var(--surface);
+  color: var(--accent);
+  border-color: var(--border-strong);
+  padding: 0.3rem 0.6rem;
+  font-size: 0.85rem;
+}
+
+/* ---- Sign in ------------------------------------------------------------ */
+
+/*
+ * The auth pages have no chrome of their own, so they are centred and given
+ * a card. Everything else in the app is a working surface; this is the one
+ * page that is a doorway.
+ */
+body.auth, .auth-card {
+  max-width: 22rem;
+  margin: 12vh auto 0;
+}
+
+.auth-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 1.75rem 1.6rem;
+}
+
+.auth-card h1 { font-size: 1.15rem; margin-bottom: 1rem; }
+.auth-card input { max-width: none; margin-bottom: 0.7rem; }
+.auth-card input[type="submit"] { width: 100%; margin-top: 0.3rem; }
+.auth-card .muted { font-size: 0.85rem; margin-top: 0.9rem; }
+
+/* ---- Flashes and status -------------------------------------------------- */
+
+.flash {
+  border-radius: var(--radius);
+  padding: 0.6rem 0.85rem;
+  margin-bottom: 1rem;
+  font-size: 0.9rem;
+  border: 1px solid transparent;
+}
+.flash-alert  { background: var(--danger-soft); color: var(--danger); border-color: var(--danger); }
+.flash-notice { background: var(--ok-soft); color: var(--ok); border-color: var(--ok); }
+
+/*
+ * Priority chips. Deliberately NOT a red-to-green severity ramp: S2C-011
+ * keeps operational urgency separate from statistical evidence, and a
+ * heat-map reads as "how bad is this patient" rather than "how soon should
+ * someone look". Weight and a single accent carry the ordering instead.
+ */
+.chip {
+  display: inline-block;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 0.15rem 0.45rem;
+  border-radius: 3px;
+  border: 1px solid var(--border-strong);
+  color: var(--text-muted);
+  background: var(--surface);
+}
+.chip-now, .chip-today { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
+.chip-watch { color: var(--text-faint); }
+
+.muted { color: var(--text-muted); }
+.faint { color: var(--text-faint); }
+
+/* An absent analytical value is information, not an empty cell (HO §84). */
+.empty::after { content: "—"; color: var(--text-faint); }
+
+/* ---- Layout scaffolding -------------------------------------------------- */
+
+.page-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 0.8rem;
+  margin-bottom: 1.2rem;
+}
+
+.tabs { display: flex; gap: 0.4rem; flex-wrap: wrap; margin-bottom: 1rem; }
+.tabs a {
+  font-size: 0.85rem;
+  padding: 0.3rem 0.7rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--text-muted);
+  background: var(--surface);
+}
+.tabs a.active { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); font-weight: 600; }
+
+.filters { display: flex; gap: 0.75rem; align-items: flex-end; flex-wrap: wrap; margin-bottom: 1rem; }
+.filters select, .filters input { max-width: 12rem; }
+
+.timeline { list-style: none; padding: 0; margin: 0.5rem 0; }
+.timeline li {
+  border-left: 2px solid var(--border);
+  padding: 0.4rem 0 0.4rem 0.9rem;
+  margin-left: 0.3rem;
+}
+.timeline .at { font-size: 0.78rem; color: var(--text-faint); font-family: var(--mono); }
+
+.stack > * + * { margin-top: 1rem; }

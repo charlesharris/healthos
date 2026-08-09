@@ -7,10 +7,38 @@
 # change. HO §127's full population (100+ subjects, instrumentation changes,
 # false alarms, reopened and watching Cases) arrives with the epic 002 gate,
 # once there are lifecycle states worth seeding.
+DEMO_EMAIL = "operator@demo.test"
+DEMO_PASSWORD = "healthos-demo-password"
+
 namespace :demo do
   desc "Seed a small synthetic population with one trajectory change"
   task seed: :environment do
     org = Organization.find_or_create_by!(slug: "demo-health") { |o| o.name = "Demo Health" }
+
+    # A known operator, so `bin/setup` leaves you able to sign in. Credentials
+    # are fixed and public on purpose: prototype-scope.md records that this
+    # system holds synthetic data only, and a demo you cannot log into is not
+    # a demo. Production supplies real accounts through invitations (HO §11).
+    operator = User.find_or_create_by!(email_address: DEMO_EMAIL) do |u|
+      u.password = DEMO_PASSWORD
+      u.full_name = "Demo Operator"
+    end
+
+    OrganizationMembership.find_or_create_by!(organization: org, user: operator) do |m|
+      # organization_admin so the demo covers invitations and member
+      # management as well as the queue.
+      m.role = "organization_admin"
+    end
+
+    # Platform staff too, so /admin and the provenance drilldown are reachable
+    # without a second account.
+    StaffMember.find_or_create_by!(user: operator) do |s|
+      s.status = "active"
+      s.note = "Created by demo:seed. Synthetic data only."
+    end
+
+    Team.find_or_create_by!(organization: org, name: "clinical")
+    Team.find_or_create_by!(organization: org, name: "operations")
 
     source = Source.find_or_create_by!(organization: org, key: "synthetic-bp") do |s|
       s.source_type = "synthetic"
@@ -83,6 +111,9 @@ namespace :demo do
     puts "  cases:        #{Cases::CaseRecord.where(organization: org).count}"
     puts "\n  Expect Cases for DEMO-001 and DEMO-004 only. A Case for DEMO-002"
     puts "  or DEMO-003 would be a false positive worth investigating."
+    puts "\n== Sign in =="
+    puts "  #{DEMO_EMAIL} / #{DEMO_PASSWORD}"
+    puts "  organization_admin + platform staff. Queue: /  Admin: /admin"
   end
 
   desc "Re-run normalization for one envelope: rake 'demo:replay[env_public_id]'"

@@ -45,6 +45,9 @@ FileUtils.chdir APP_ROOT do
   puts "\n== Preparing databases =="
   system! "docker compose run --rm migrate"
 
+  puts "\n== Seeding a synthetic demo population =="
+  system! "docker compose run --rm web bin/rails demo:seed"
+
   puts "\n== Done =="
   puts "   bin/dev                 start everything in containers"
   puts "   bin/dev --native        host Ruby against containerised deps"

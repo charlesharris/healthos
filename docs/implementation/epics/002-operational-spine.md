@@ -110,6 +110,35 @@ land), bulk clinical actions.
 
 ## Decision Log
 
+### 2026-08-09 — styling, and a seeded operator account
+
+**"No CSS frameworks, function over polish" was half right.** The
+no-framework part stands — this is dense tabular data read under time
+pressure, and a framework's opinions would fight that. The "no polish"
+part did not: `application.css` contained nothing but a comment block,
+so every screen including sign-in was raw unstyled HTML. The prototype
+charter names a design partner as the audience for exactly these
+surfaces, so unstyled was never going to hold.
+
+Now one hand-written stylesheet, ~250 lines, no dependencies. Two
+choices carry product meaning rather than taste:
+
+- **Priority chips are not a red-to-green severity ramp.** A heat map
+  reads as "how bad is this patient", which is precisely the conflation
+  S2C-011 forbids — priority is how soon someone should look, not how
+  strong the evidence is. Weight and a single accent carry the ordering.
+- **HO §84's primary/secondary hierarchy is expressed in type weight and
+  colour**, not layout, so it survives a table growing more columns as
+  epics 003 and 004 add analytical ones.
+
+**A seeded operator account.** Credentials existed only as an accident
+of testing, so `bin/setup` produced a system nobody could log into.
+`demo:seed` now creates `operator@demo.test` as organization_admin and
+platform staff, prints the credentials, and `bin/setup` runs it. Fixed
+and public on purpose: prototype-scope.md records synthetic data only,
+and a demo you cannot open is not a demo. Production accounts come
+through invitations (HO §11).
+
 ### 2026-08-09 — 002-21/22 Ops Queue v1 and Quick Review
 
 Built by a sub-agent against the existing patterns; verified here. 73
