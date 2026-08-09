@@ -198,7 +198,12 @@ module Ops
       @requested_key = semantic_key
       @preferred_keys = Array(preferred_keys)
       @filters = (filters || {}).stringify_keys.slice(*FILTERABLE.keys).compact_blank
-      @baseline_mode = BASELINE_MODES.include?(baseline_mode.to_s) ? baseline_mode.to_s : DEFAULT_BASELINE_MODE
+      # An explicit choice is honoured even when it cannot carry a comparison;
+      # only an unstated one falls back. SC §73 forbids choosing a different
+      # baseline SILENTLY, not choosing one at all — and SC §64 explicitly
+      # provides for a cohort prior when the personal record is immature.
+      @requested_baseline_mode = BASELINE_MODES.include?(baseline_mode.to_s) ? baseline_mode.to_s : nil
+      @baseline_mode_explicit = @requested_baseline_mode.present?
       # Small multiples are only comparable on a shared axis. When Explore
       # splits one measure into panels, every panel is handed the same bands —
       # otherwise each panel scales to its own data and a quiet facet looks
@@ -206,9 +211,33 @@ module Ops
       @value_bands_override = value_bands.presence
     end
 
-    attr_reader :subject, :range, :selection, :filters, :baseline_mode
+    attr_reader :subject, :range, :selection, :filters
 
     def cohort_baseline? = baseline_mode == "cohort"
+    def baseline_mode_explicit? = @baseline_mode_explicit
+
+    # SC §64: "When personal baseline is immature, a domain may use a cohort
+    # prior. UI must say so."
+    #
+    # A personal record that cannot carry the selection is the ordinary
+    # cold-start case, not an error, and leaving the operator at a dead end
+    # with the remedy buried in prose was the wrong answer to it. So an
+    # unstated baseline falls back to the prior when the personal one is
+    # immature and the prior is not — and #fell_back? makes the view say so,
+    # which is the whole difference between this and SC §73's forbidden
+    # silent substitution.
+    def baseline_mode
+      @baseline_mode ||=
+        if @baseline_mode_explicit
+          @requested_baseline_mode
+        elsif !sufficiency_for("rest").sufficient? && sufficiency_for("cohort").sufficient?
+          "cohort"
+        else
+          DEFAULT_BASELINE_MODE
+        end
+    end
+
+    def fell_back? = !@baseline_mode_explicit && baseline_mode != DEFAULT_BASELINE_MODE
 
     # Narrows everything on screen — density, marks and every profile — so the
     # chart and the breakdown never describe different populations. Denominators
@@ -393,17 +422,22 @@ module Ops
       def sufficient? = sufficient
     end
 
-    def baseline_sufficiency
-      @baseline_sufficiency ||= begin
-        days = distinct_days(baseline_readings_scope)
-        span = calendar_span(baseline_readings_scope)
+    def baseline_sufficiency = sufficiency_for(baseline_mode)
+
+    def sufficiency_for(mode)
+      @sufficiency_by_mode ||= {}
+      @sufficiency_by_mode[mode] ||= begin
+        scope = baseline_scope_for(mode)
+        days = distinct_days(scope)
+        span = calendar_span(scope)
         maturity = Analysis::BaselineMaturity.call(usable_units: days, calendar_span_days: span)
+        cohort = mode == "cohort"
 
         Sufficiency.new(
           usable_units: days, calendar_span_days: span, maturity: maturity,
           sufficient: maturity != "immature",
-          label: cohort_baseline? ? "Program population prior" : "This subject's other readings in the window",
-          note: cohort_baseline? ?
+          label: cohort ? "Program population prior" : "This subject's other readings in the window",
+          note: cohort ?
             "SC §64 cohort prior. Between-subject context: readings from different people are not repeated measures of one person (STAT-021), and evidence resting mainly on a cohort prior cannot reach STRONG individual-level evidence." :
             "SC §20 personal comparison. Not a universal normal — it is this subject against their own record over this window."
         )
@@ -520,8 +554,10 @@ module Ops
       scope.where(value_numeric: selection.value_min..selection.value_max)
     end
 
-    def baseline_readings_scope
-      return cohort_prior_scope if cohort_baseline?
+    def baseline_readings_scope = baseline_scope_for(baseline_mode)
+
+    def baseline_scope_for(mode)
+      return cohort_prior_scope if mode == "cohort"
 
       profile_scope.where.not(id: selection_readings_scope.select(:id))
     end

@@ -112,6 +112,10 @@ land), bulk clinical actions.
 
 ## Decision Log
 
+> Exploratory-surface work (distribution charts, drag-to-select, drill-down,
+> Explore) has moved to **`002x-exploratory-surfaces.md`**, which also carries
+> the open SC §66 defect in the cohort prior. Entries below predate the split.
+
 ### 2026-08-09 — small multiples, and one home for the denominator rule
 
 **The denominator rule now lives in one place.** It was wrong three times in

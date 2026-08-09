@@ -56,6 +56,12 @@ STAT-031→036, STAT-040/042; regulatory gate §131.
       rendering; no LLM anywhere in this path (§83)
 
 ### Investigation Workbench (Milestone 9)
+
+> A descriptive-only precursor to 004-09/10/11 already exists — see
+> `002x-exploratory-surfaces.md`. It ranks nothing and persists nothing, by
+> construction, so these tasks remain the real work: what it cannot do is
+> exactly the set that needs Epic 003's artifacts.
+
 - [ ] 004-09 Timeline component (left): observations, events, signals,
       case events, finding generation, dispositions (§89–90);
       Stimulus range selection

@@ -59,6 +59,25 @@
     </span>
   </div>
 
+  <%# SC §64: "When personal baseline is immature, a domain may use a cohort
+      prior. UI must say so." This is the saying-so. SC §73 forbids a SILENT
+      substitution, which is why the fallback is announced in place rather than
+      inferred from the chip above. %>
+  <% if profile.fell_back? %>
+    <p class="note" style="margin-bottom:0.5rem">
+      <strong>Compared against the program.</strong>
+      This subject's own record has
+      <%= pluralize(profile.sufficiency_for("rest").usable_units, "usable day") %>
+      outside the selection — below the governed minimum of
+      <%= pluralize(Ops::TelemetryProfileQuery.minimum_baseline_units, "day") %>
+      (SC §22), which is the ordinary case early in a program rather than a
+      fault. SC §64 allows a cohort prior here, so that is what is shown.
+      <%= link_to "Compare against their own record anyway",
+                  base_path.merge(baseline: "rest"),
+                  data: { turbo_frame: frame_id || "_top" } %>.
+    </p>
+  <% end %>
+
   <p class="tiny muted" style="margin-bottom:0.5rem"><%= base.note %></p>
 
   <p class="tiny muted" style="margin-bottom:0.5rem">
@@ -96,15 +115,18 @@
       STAT-018). Both thresholds are governed (STAT-044); nothing here decides
       what they should be. %>
   <% unless profile.comparable? %>
-    <div class="note note-warn" style="margin-bottom:0.6rem">
-      <strong>Not enough to compare.</strong>
+    <div class="note" style="margin-bottom:0.6rem">
+      <strong>Nothing to compare this against yet.</strong>
       <% unless base.sufficient? %>
         The baseline has <%= pluralize(base.usable_units, "usable day") %> over
         <%= pluralize(base.calendar_span_days, "day") %>, below the governed minimum
         (<%= pluralize(Ops::TelemetryProfileQuery.minimum_baseline_units, "day") %> over
         <%= pluralize(Ops::TelemetryProfileQuery.minimum_baseline_span, "day") %>) — SC §22.
-        <% if profile.baseline_mode == "rest" %>
-          Narrow the selection, or compare against the program instead.
+        <% if profile.baseline_mode == "rest" && !profile.cohort_baseline? %>
+          <%= link_to "Compare against the program",
+                      base_path.merge(baseline: "cohort"),
+                      class: "btn btn-sm", data: { turbo_frame: frame_id || "_top" } %>
+          or narrow the selection.
         <% end %>
       <% end %>
       <% unless sel.sufficient? %>

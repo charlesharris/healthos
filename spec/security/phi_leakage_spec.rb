@@ -52,6 +52,18 @@ RSpec.describe "PHI leakage", type: :model do
     skip "object storage unavailable (#{e.class}) — run `docker compose up -d minio`"
   end
 
+  # Every scalar reachable in a nested structure. Comparing leaves is what
+  # makes "is this clinical value in the job arguments" answerable without
+  # asking "does this digit sequence appear anywhere in the serialization",
+  # which is a different and much weaker question.
+  def leaf_values(node)
+    case node
+    when Hash then node.flat_map { |key, value| [ key ] + leaf_values(value) }
+    when Array then node.flat_map { |value| leaf_values(value) }
+    else [ node ]
+    end
+  end
+
   def run_pipeline!
     subject_record = Identity::ResolveSubject.call(
       organization: organization, system: "mrn", value: PHI_VALUES[:mrn]
@@ -122,8 +134,19 @@ RSpec.describe "PHI leakage", type: :model do
       PHI_VALUES.each_value do |value|
         expect(serialized).not_to include(value)
       end
-      # Nor the clinical values themselves.
-      expect(serialized).not_to include("142")
+
+      # The clinical value, checked against the decoded leaves rather than as a
+      # substring of the whole serialization.
+      #
+      # This assertion used to read `expect(serialized).not_to include("142")`
+      # and failed roughly one run in fifteen: "142" is three hex characters,
+      # and a UUIDv7 contains it about 0.22% of the time — with a dozen ids in
+      # a job payload that is a real per-run probability. The file's own header
+      # says PHI fixtures are "deliberately unusual, so a match cannot be
+      # coincidence"; a bare three-digit number is the opposite of that, and a
+      # security spec that cries wolf trains people to re-run it.
+      expect(leaf_values(ActiveJob::Base.queue_adapter.enqueued_jobs))
+        .not_to include(142, 142.0, "142", 88, "88", 68, "68")
     end
 
     # Job arguments are serialized into the queue DATABASE, where they outlive

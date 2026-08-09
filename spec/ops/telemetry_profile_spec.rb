@@ -399,8 +399,9 @@ RSpec.describe "Quick Review telemetry profile", type: :model do
         "custom time range" => {
           selected: Ops::TelemetryProfileQuery::Selection.new(
             from: anchor - 12.days, to: anchor - 4.days, origin: :custom
-          ), baseline: nil
+          ), baseline: "rest"
         },
+        "auto-chosen baseline" => { selected: selection, baseline: nil },
         "value-bounded box" => {
           selected: Ops::TelemetryProfileQuery::Selection.new(
             from: anchor - 20.days, to: anchor, value_min: 118, value_max: 125, origin: :custom
@@ -450,7 +451,7 @@ RSpec.describe "Quick Review telemetry profile", type: :model do
 
     # The one configuration where the selection does own its days outright.
     it "gives the baseline the rest of the range for a plain time selection" do
-      result = profile(selected: Ops::TelemetryProfileQuery::Selection.new(
+      result = profile(baseline: "rest", selected: Ops::TelemetryProfileQuery::Selection.new(
         from: anchor - 7.days, to: anchor, origin: :custom
       ))
 
@@ -567,12 +568,47 @@ RSpec.describe "Quick Review telemetry profile", type: :model do
       end
 
       it "compares against the program when the personal record cannot carry it" do
-        personal = profile
+        personal = profile(baseline: "rest")
         cohort = profile(baseline: "cohort")
 
         expect(personal.baseline_sufficiency).not_to be_sufficient
         expect(cohort.baseline_sufficiency).to be_sufficient
         expect(cohort).to be_comparable
+      end
+
+      # SC §64: a personal record too short to carry the selection is the
+      # ordinary cold-start case, not an error. Leaving the operator at a dead
+      # end with the remedy buried in prose was the wrong answer to it.
+      it "falls back to the prior rather than dead-ending" do
+        result = profile
+
+        expect(result.baseline_mode).to eq("cohort")
+        expect(result).to be_comparable
+      end
+
+      # SC §73 forbids choosing a different baseline SILENTLY. #fell_back? is
+      # what the view hangs the announcement on — that is the whole difference.
+      it "announces the fallback rather than making it quietly" do
+        expect(profile).to be_fell_back
+        expect(profile.baseline_sufficiency.label).to eq("Program population prior")
+      end
+
+      it "does not fall back when the personal record can carry the selection" do
+        14.times { |i| observe(days_ago: i + 8, value: 119) }
+
+        expect(profile.baseline_mode).to eq("rest")
+        expect(profile).not_to be_fell_back
+      end
+
+      # An explicit choice is honoured even when it cannot carry a comparison:
+      # the operator asked a specific question and is entitled to the answer,
+      # including "there is not enough here".
+      it "honours an explicit choice of the personal record" do
+        result = profile(baseline: "rest")
+
+        expect(result.baseline_mode).to eq("rest")
+        expect(result).not_to be_fell_back
+        expect(result).not_to be_comparable
       end
 
       # Comparing someone against a population they are inside of pulls the
@@ -604,14 +640,14 @@ RSpec.describe "Quick Review telemetry profile", type: :model do
       end
 
       it "names the personal baseline as a personal comparison, not a normal" do
-        expect(profile.baseline_sufficiency.label).to match(/other readings/i)
-        expect(profile.baseline_sufficiency.note).to match(/not a universal normal/i)
+        result = profile(baseline: "rest")
+
+        expect(result.baseline_sufficiency.label).to match(/other readings/i)
+        expect(result.baseline_sufficiency.note).to match(/not a universal normal/i)
       end
 
-      # SC §73: never silently choose a different baseline.
-      it "defaults to the personal record rather than quietly switching" do
-        expect(profile.baseline_mode).to eq("rest")
-        expect(profile(baseline: "nonsense").baseline_mode).to eq("rest")
+      it "treats an unrecognised mode as unstated rather than as a choice" do
+        expect(profile(baseline: "nonsense")).not_to be_baseline_mode_explicit
       end
     end
   end
