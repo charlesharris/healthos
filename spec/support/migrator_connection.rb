@@ -27,4 +27,42 @@ class MigratorConnection < ActiveRecord::Base
   ensure
     remove_connection
   end
+
+  # Empties every tenant-facing table, in an order derived from the schema's
+  # foreign keys rather than hand-maintained.
+  #
+  # For specs that seed broadly enough that naming the tables is a losing
+  # game: a hand-written list is wrong the moment someone adds a table, and it
+  # fails as an FK violation partway through teardown, leaving the database
+  # half-cleaned and the next spec failing somewhere unrelated.
+  def self.wipe_tenant_data!
+    conn = connect!
+    tables = conn.tables - %w[schema_migrations ar_internal_metadata]
+
+    ordered = topological_order(conn, tables)
+    ordered.each { |table| conn.execute("DELETE FROM #{conn.quote_table_name(table)}") }
+  ensure
+    remove_connection
+  end
+
+  # Dependents first. A table is safe to delete once nothing still in the set
+  # references it.
+  def self.topological_order(conn, tables)
+    remaining = tables.to_h do |table|
+      [ table, conn.foreign_keys(table).map(&:to_table).select { |t| tables.include?(t) } - [ table ] ]
+    end
+
+    ordered = []
+    until remaining.empty?
+      leaves = remaining.keys.reject do |table|
+        remaining.except(table).values.any? { |deps| deps.include?(table) }
+      end
+      raise "cycle in foreign keys among #{remaining.keys.join(', ')}" if leaves.empty?
+
+      ordered.concat(leaves)
+      remaining.except!(*leaves)
+    end
+
+    ordered
+  end
 end

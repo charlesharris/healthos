@@ -100,15 +100,66 @@ land), bulk clinical actions.
 
 ## Epic Gate
 
-- [ ] Demo seed grows to a small operable population incl. a
+- [x] Demo seed grows to a small operable population incl. a
       monitoring interruption and a reopened Case
 - [ ] Team walkthrough: operate the queue end-to-end without touching
       the console
 - [x] All §120 concurrency specs pass in CI loop
-- [ ] Do-not-ship list (§188) items re-checked: no Case duplication
+- [x] Do-not-ship list (§188) items re-checked: no Case duplication
       under concurrency, no hidden source changes
 
 ## Decision Log
+
+### 2026-08-09 — demo population, and a demo that checks itself
+
+The epic gate asks for "a small operable population incl. a monitoring
+interruption and a reopened Case". Two cohorts now, for two jobs: a
+named cohort (DEMO-001…007) hand-authored with **stated ground truth**,
+and a background cohort (`DEMO_POPULATION`, default 40) so that filters,
+sort and pagination are exercised against something other than four
+rows.
+
+Four of the named subjects exist because of STAT-003 and STAT-035.
+DEMO-005 stops reporting — the surviving readings average out unchanged,
+so a system that only watches values sees nothing, and "the monitoring
+stopped" is the thing a provider most needs told. DEMO-006 switches from
+an automatic cuff to manual entry, which looks like improvement.
+DEMO-007 has two readings, both high, and must produce nothing. A demo
+containing only genuine physiology would quietly teach the opposite of
+the contract.
+
+**Ground truth is verified, not just printed** —
+`spec/demo/seed_ground_truth_spec.rb`. A demo whose claims are never
+checked drifts the first time a threshold moves, and it drifts in the
+most damaging direction, because a demo is what someone is shown before
+they decide to trust the system.
+
+It immediately earned its place by catching two bugs, both in the seed:
+
+- The DEMO-006 method switch started at day 9, which bled two days into
+  the 21-day baseline window. `manual_entry` therefore appeared in both
+  profiles, the monitor saw no *new* method, and the seed produced a
+  trajectory Case with no instrumentation Signal beside it — STAT-035's
+  exact failure, manufactured by the demo rather than caught by it.
+- The reopen readings were stamped "now". Monitor windows are day-
+  aligned and half-open, so the current incomplete day is deliberately
+  outside them and no Signal fired at all. The seed printed "reopen NOT
+  produced" rather than claiming success, which is the only reason it
+  was visible.
+
+A third came from S2C-002: re-evaluating the same monitor over the same
+day-aligned window returns the EXISTING Signal, so the reopen attempt
+reported `already_attached` and no reopen happened. The seed now picks a
+subject with no excursion Signal yet.
+
+**`demo:reset`.** Deleting the demo organization is not something the
+application role can do, and that is the design working — append-only by
+privilege revocation means the task fails with a permission error under
+`healthos_app` and succeeds under `healthos_migrator`. Both verified.
+Deletion order is derived from the schema's foreign keys rather than
+hand-maintained, after a hand-written list failed halfway through as an
+FK violation; `MigratorConnection.wipe_tenant_data!` does the same for
+specs.
 
 ### 2026-08-09 — bin/smoke: CI now boots the application
 
