@@ -35,7 +35,7 @@ module SyntheticHealth
     end
 
     def round(value)
-      Decimal.cast(value).round(precision)
+      Decimal.round(value, precision)
     end
 
     def families

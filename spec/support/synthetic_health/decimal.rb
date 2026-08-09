@@ -42,8 +42,11 @@ module SyntheticHealth
       BigDecimal(0)
     end
 
+    # NOTE: BigDecimal#round(0) returns an Integer, which would silently
+    # reintroduce a non-BigDecimal measurement value for integer-precision
+    # dimensions. Cast back so the type is invariant.
     def round(value, precision = PRECISION)
-      cast(value).round(precision)
+      cast(cast(value).round(precision))
     end
 
     # SC §29: the default descriptive summary of a continuous dimension is the

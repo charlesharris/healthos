@@ -40,7 +40,7 @@ STAT-001, 004–009, 012–030, 036–042; S2C-018/019.
 ## Tasks
 
 ### Simulation harness FIRST
-- [ ] 003-01 `spec/support/synthetic_health/`: SyntheticSubject,
+- [x] 003-01 `spec/support/synthetic_health/`: SyntheticSubject,
       TimelineBuilder, MissingnessPattern, SourceSwitchScenario,
       TrajectoryScenario, CorrelatedDimensionsScenario — deterministic
       seeds (§100). Scenario families: null, level shift, trend,
@@ -130,4 +130,53 @@ land when a domain needs them — keep BaselineDefinition general).
 
 ## Decision Log
 
-_(append here)_
+### 2026-08-09 — 003-01 simulation harness
+
+Built ahead of the engine, as the epic requires ("build this before the
+engine; it is the engine's acceptance instrument"). 43 examples.
+Delegated to a sub-agent; reviewed and verified before commit.
+
+**Ground truth is structural, not asserted.** Generation is layered —
+biology, then instrumentation, then missingness — and deterministic
+components consume zero randomness. So at a given seed,
+`latent(level_shift) - latent(null)` equals the injected magnitude
+*exactly* at every index, with no tolerance, and the source-switch and
+missingness families have `latent_series` byte-identical to null. "The
+instrument changed, the subject did not" is a property of the generator
+rather than a hope about it. That is what makes the harness usable as an
+acceptance instrument: a failure means the engine is wrong, not that the
+fixture drifted.
+
+**Determinism is portable, not merely repeatable.** Stream seeds derive
+via FNV-1a rather than `String#hash`, which is salted per process and
+would have looked deterministic locally while breaking in CI. No Float
+and no `Math.*` anywhere — noise is Irwin–Hall over integer draws and
+the seasonal wave is a twelve-point BigDecimal table. Verified
+byte-identical across separate processes.
+
+**No thresholds encoded.** `Scenario` deliberately exposes no
+`evidence_level` or `significant?`, and a spec asserts their absence.
+Truth reports counts, denominators, completeness ratios and source mixes
+descriptively; judging them is the engine's job. Six of the twelve
+families inject no biological effect at all, since STAT-036 makes the
+negative result the thing most worth testing.
+
+**DST is deliberately not modelled.** Subjects carry a fixed integer UTC
+offset so the harness stays Rails-free. Defaults are negative-offset so
+the evening slot lands on the *next* UTC day — an engine that groups by
+UTC date instead of subject-local date fails loudly (HO §121).
+
+**⚠️ Contract ambiguity found — needs a human decision (003-14).**
+SC §14 defines completeness over "expected opportunities" but does not
+say where `invalid_measurement`, `excluded_by_rule` and `unknown` sit.
+The harness counts everything except `not_expected` in the denominator,
+matching `Observation::EXPECTED_BUT_ABSENT_STATES`. This is a
+*statistical* decision, not an implementation detail: it changes every
+completeness ratio and therefore which STAT-012 gate a comparison
+falls into. Recorded rather than settled — confirm before 003-14.
+
+**Process note:** a `git add -A` on the main thread swept 19 of these
+files into commit `663235e` ("001-11: case correlation"), whose message
+does not mention them. History was not rewritten, since that commit is
+pushed and CI-green. Subsequent commits use targeted paths while a
+sub-agent is writing.
