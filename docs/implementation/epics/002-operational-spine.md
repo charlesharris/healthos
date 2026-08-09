@@ -102,8 +102,10 @@ land), bulk clinical actions.
 
 - [x] Demo seed grows to a small operable population incl. a
       monitoring interruption and a reopened Case
-- [ ] Team walkthrough: operate the queue end-to-end without touching
-      the console
+- [~] Team walkthrough: operate the queue end-to-end without touching
+      the console — script written at
+      `docs/implementation/walkthroughs/002-operate-the-queue.md`;
+      needs a human to actually walk it
 - [x] All §120 concurrency specs pass in CI loop
 - [x] Do-not-ship list (§188) items re-checked: no Case duplication
       under concurrency, no hidden source changes
