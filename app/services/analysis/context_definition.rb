@@ -50,6 +50,19 @@ module Analysis
 
         name.constantize
       end
+
+      # Every biological key the registered packs declare, in the order they
+      # declare it.
+      #
+      # Exists so a cohort surface with no Case in hand — and therefore no
+      # context definition to consult — can still open on the measure a pack
+      # considers primary, instead of whichever key wins an alphabetical tie.
+      # Platform core asks the packs rather than naming a key (INV-35).
+      def declared_key_order
+        DEFINITIONS.keys.flat_map do |definition_key|
+          Array(find(definition_key).parameters[:biological_keys])
+        end.uniq
+      end
     end
 
     def initialize(subject:, window:, as_of:)

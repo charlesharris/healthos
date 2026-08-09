@@ -112,6 +112,61 @@ land), bulk clinical actions.
 
 ## Decision Log
 
+### 2026-08-09 — drag-to-select, and a cohort Explore surface
+
+**The selection is a URL, not client state.** Releasing the pointer navigates.
+That buys linkability, working back/forward, recomputation through the same
+tenant-scoped query as any other request, and — the one that matters — the
+read stays audited. A selection held in JavaScript would have none of those.
+Without JavaScript the chart still renders with the Signal's window selected
+and a from/to form does the same job; the drag is an accelerator, never the
+only way in.
+
+**Baseline became the complement.** Previously it was a contiguous window
+before the selection. A region dragged from the middle of the range has
+baseline on both sides of it, which a window cannot express, so baseline is
+now "everything in range the selection does not cover". The default case is
+unchanged by construction: the complement of the Signal's window inside the
+Signal's range *is* the old baseline window.
+
+**A value-bounded selection is flagged.** Dragging a box conditions on the
+outcome variable, so dimensions may differ *because of how the box was drawn*.
+BubbleUp has the same property and does not say so; a product whose promise is
+"an honest representation of the available evidence" has to. The strip carries
+a warning whenever `value_min`/`value_max` are set, and a drag spanning ~90% of
+the value axis deliberately sends no bounds, so a time-range drag is not
+falsely accused of conditioning.
+
+**Explore is `/ops/explore`, and is read-only by construction.** It ranks
+nothing and saves nothing, so it cannot quietly become a findings tool: what an
+operator notices there reaches the queue through a Monitor or not at all
+(S2C-003). It is NOT the Epic 004 workbench. It adds a `subject` dimension —
+the question a cohort heatmap exists to answer — with handles kept opaque
+(HO §92), a top-8 fold that states how many it folded, and one
+`telemetry.explored` audit row per query carrying the filter set and no values.
+
+Three bugs the work surfaced, all of which had shipped:
+
+* `coverage_stats` printed **"21/20"** — a numerator above its own denominator.
+  A time-only selection owns its days outright; a value-bounded one does not,
+  because a day inside its time range still contributes baseline readings for
+  values outside the box. Subtracting anyway double-counted.
+* The drag controller derived its target from `window.location`, which inside
+  the drawer is `/ops/cases`, not the Case. Dragging navigated the frame to the
+  queue and closed the panel. The base URL is now handed over by the server.
+* `tr("_", " ")` humanized `device_automatic` correctly and corrupted
+  `sub_90rd…` — an identifier the operator is meant to be able to copy.
+  Identity rows keep their handle verbatim.
+
+And one caught by Brakeman rather than by a spec: the dimension counts were
+computed as `COUNT(*) FILTER (WHERE …)` with a sanitized fragment
+interpolated into `pluck`. It was safe, and the warning was still right — a
+reviewer cannot tell at the call site whether an interpolated fragment was
+sanitized, and the value bounds arrive from a query parameter, which is
+exactly where nobody should have to take that on trust. Replaced with two
+grouped counts and a merge: one extra query per dimension, no raw SQL, and
+`where.not(id: selection.select(:id))` for the complement.
+
 ### 2026-08-09 — a BubbleUp-shaped view that obeys the ranking contract
 
 Quick Review now opens with a distribution chart and a baseline-vs-selection

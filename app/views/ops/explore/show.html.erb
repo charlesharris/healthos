@@ -1,0 +1,85 @@
+<%# Cohort-wide exploration.
+
+    Where a heatmap earns its keep: one subject measuring daily cannot fill
+    one, the whole program can, and "which subjects and which devices are in
+    this region" is a question only the cohort can answer.
+
+    Descriptive throughout. Nothing here is ranked, scored, or saved — see
+    Ops::ExploreController for why that is a constraint rather than an
+    omission. %>
+<% content_for :title, "Explore" %>
+<% base = { controller: "/ops/explore", action: "show",
+            range_from: @range.from.to_date, range_to: @range.to.to_date } %>
+
+<div class="page-head">
+  <div>
+    <h1>Explore</h1>
+    <p class="page-sub">
+      Every reading in <%= Current.organization.name %> on one pair of axes.
+      Drag a region to see what is in it.
+    </p>
+  </div>
+</div>
+
+<%= render "layouts/flash" %>
+
+<%= form_with url: url_for(controller: "/ops/explore", action: "show"), method: :get, class: "filterbar" do %>
+  <div class="filter">
+    <%= label_tag :key, "Measure" %>
+    <%= select_tag :key,
+                   options_for_select(@telemetry.available_keys.map { |key|
+                     [ key.split(".").last.tr("_", " "), key ]
+                   }, @telemetry.semantic_key) %>
+  </div>
+
+  <div class="filterbar-divider" aria-hidden="true"></div>
+
+  <div class="filter">
+    <%= label_tag :range_from, "From" %>
+    <%= date_field_tag :range_from, @range.from.to_date %>
+  </div>
+  <div class="filter">
+    <%= label_tag :range_to, "To" %>
+    <%= date_field_tag :range_to, @range.to.to_date %>
+  </div>
+
+  <%= submit_tag "Apply", class: "btn btn-sm" %>
+
+  <span class="spacer"></span>
+  <span class="tiny faint">
+    Range is capped at <%= Ops::ExploreController::MAX_DAYS %> days.
+  </span>
+<% end %>
+
+<% if @telemetry.any_data? %>
+  <section class="section">
+    <%= render "ops/cases/distribution",
+               profile: @telemetry, base_path: base, key_param: :key, frame_id: nil %>
+  </section>
+
+  <% if @telemetry.selection.none? %>
+    <div class="empty-state">
+      <strong>Drag a region on the chart.</strong>
+      Everything inside it becomes the selection; everything outside becomes
+      the baseline. The breakdown appears here.
+    </div>
+  <% else %>
+    <%= render "ops/cases/dimensions", profile: @telemetry %>
+
+    <%# The point of noticing something here is to go and look at the work it
+        belongs to. Nothing on this surface creates a Case — only a Monitor
+        does that (S2C-003). %>
+    <p class="tiny muted">
+      Something worth acting on? It reaches the queue through a Monitor, not
+      from here — <%= link_to "open the Ops Queue", ops_cases_path %> to see
+      what has already been raised.
+    </p>
+  <% end %>
+<% else %>
+  <div class="empty-state">
+    <strong>No readings in this range.</strong>
+    <%= Current.organization.name %> has no observed telemetry between
+    <%= l(@range.from.to_date, format: :long) %> and
+    <%= l(@range.to.to_date, format: :long) %>.
+  </div>
+<% end %>

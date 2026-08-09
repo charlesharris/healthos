@@ -48,13 +48,20 @@ module Ops
     # the window the monitor actually looked at. A chart drawn over a window of
     # the UI's own invention would illustrate a claim nobody made — and would
     # quietly disagree with the numbers in the Signal beside it.
-    def telemetry_profile(semantic_key: nil)
-      selection, baseline = windows
-      return nil if selection.nil?
+    # `selection` is the operator's dragged region, or nil for the Signal's
+    # own window. Either way the RANGE stays what the monitor looked at, so
+    # dragging changes what is selected rather than what is on screen and two
+    # selections over the same Case stay comparable.
+    def telemetry_profile(semantic_key: nil, selection: nil)
+      bounds = signal_bounds
+      return nil if bounds.nil?
+
+      range = TelemetryProfileQuery::Window.new(from: bounds[:range_from], to: bounds[:to])
 
       TelemetryProfileQuery.new(
         organization: organization, membership: membership,
-        subject: resolve.subject, selection: selection, baseline: baseline,
+        subject: resolve.subject, range: range,
+        selection: selection&.clamp_to(range) || bounds[:selection],
         semantic_key: semantic_key, preferred_keys: domain_pack_key_order
       )
     end
@@ -71,7 +78,7 @@ module Ops
       []
     end
 
-    def windows
+    def signal_bounds
       signal = trigger_attachments.first&.signal
 
       selection_from, selection_to =
@@ -79,20 +86,21 @@ module Ops
           [ signal.window_started_at, signal.window_ended_at || signal.detected_at ]
         else
           # No trigger Signal: fall back to the week before detection, which is
-          # what the Case is at least nominally about. Labelled "recent" rather
-          # than borrowing a monitor's vocabulary for a window no monitor chose.
+          # what the Case is at least nominally about.
           [ resolve.detected_at - 7.days, resolve.detected_at ]
         end
-      return [ nil, nil ] if selection_from.nil? || selection_to.nil?
+      return nil if selection_from.nil? || selection_to.nil?
 
       baseline_days = signal&.attributes_json&.dig("baseline_window_days").presence ||
                       TelemetryProfileQuery::DEFAULT_BASELINE_DAYS
 
-      [
-        TelemetryProfileQuery::Window.new(from: selection_from, to: selection_to, label: "selection"),
-        TelemetryProfileQuery::Window.new(from: selection_from - baseline_days.to_i.days,
-                                          to: selection_from, label: "baseline")
-      ]
+      {
+        range_from: selection_from - baseline_days.to_i.days,
+        to: selection_to,
+        selection: TelemetryProfileQuery::Selection.new(
+          from: selection_from, to: selection_to, origin: :signal
+        )
+      }
     end
   end
 end

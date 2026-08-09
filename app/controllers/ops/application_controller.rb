@@ -65,7 +65,10 @@ module Ops
                   trigger_attachments: detail.trigger_attachments,
                   other_attachments: detail.other_attachments,
                   timeline: detail.timeline,
-                  telemetry: detail.telemetry_profile(semantic_key: params[:key].presence) }
+                  telemetry: detail.telemetry_profile(
+                    semantic_key: params[:key].presence,
+                    selection: TelemetryProfileQuery::Selection.from_params(params)
+                  ) }
       )
     end
   end

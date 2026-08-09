@@ -27,7 +27,7 @@ module TelemetryChartsHelper
   Geometry = Struct.new(
     :view_box, :plot_left, :plot_top, :plot_width, :plot_height,
     :cell_width, :band_height, :days, :bands, :band_size,
-    :value_min, :value_max, keyword_init: true
+    :value_min, :value_max, :start_ms, :end_ms, keyword_init: true
   ) do
     def x_for_day(index) = plot_left + (index * cell_width)
     def day_center(index) = x_for_day(index) + (cell_width / 2.0)
@@ -50,6 +50,7 @@ module TelemetryChartsHelper
   def telemetry_geometry(profile)
     days = profile.days.length
     bands = profile.value_bands.length
+    first_day = profile.days.first
     plot_width = VIEW_W - PAD[:left] - PAD[:right]
     plot_height = VIEW_H - PAD[:top] - PAD[:bottom]
 
@@ -61,7 +62,13 @@ module TelemetryChartsHelper
       band_height: bands.zero? ? 0 : plot_height / bands.to_f,
       days: days, bands: bands, band_size: profile.band_size,
       value_min: profile.value_bands.first.to_f,
-      value_max: (profile.value_bands.last.to_f + profile.band_size)
+      value_max: (profile.value_bands.last.to_f + profile.band_size),
+      # The drag controller maps pixels back to data, so it needs the same
+      # day-aligned span the columns were drawn from — not the raw window
+      # bounds, which may sit mid-day and would put every dragged edge a few
+      # hours off what the operator saw.
+      start_ms: (first_day&.in_time_zone.to_i || 0) * 1000,
+      end_ms: (first_day ? (first_day.in_time_zone + days.days).to_i : 0) * 1000
     )
   end
 

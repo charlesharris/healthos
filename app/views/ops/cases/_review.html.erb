@@ -48,7 +48,10 @@
           <section class="section">
             <h2 class="section-title">Distribution</h2>
             <%= render "ops/cases/distribution",
-                       profile: telemetry, case_record: case_record, drawer: drawer %>
+                       profile: telemetry,
+                       base_path: { controller: "/ops/cases", action: "show", id: case_record.id },
+                       key_param: :key,
+                       frame_id: drawer ? "case_drawer" : nil %>
           </section>
 
           <%= render "ops/cases/dimensions", profile: telemetry %>

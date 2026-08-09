@@ -38,11 +38,15 @@ RSpec.describe "Quick Review telemetry profile", type: :model do
   let(:key) { "health.vital.blood_pressure.systolic" }
   let(:anchor) { Time.utc(2026, 3, 22, 0, 0) }
 
-  let(:selection) do
-    Ops::TelemetryProfileQuery::Window.new(from: anchor - 7.days, to: anchor, label: "selection")
+  # The RANGE is what the chart draws; the SELECTION is the region inside it
+  # being asked about. Baseline is the complement — everything in range that
+  # the selection does not cover — so dragging changes what is compared
+  # without changing what is on screen.
+  let(:range) do
+    Ops::TelemetryProfileQuery::Window.new(from: anchor - 28.days, to: anchor)
   end
-  let(:baseline) do
-    Ops::TelemetryProfileQuery::Window.new(from: anchor - 28.days, to: anchor - 7.days, label: "baseline")
+  let(:selection) do
+    Ops::TelemetryProfileQuery::Selection.new(from: anchor - 7.days, to: anchor, origin: :signal)
   end
 
   # `minute` exists because observations carry a unique normalization identity
@@ -61,10 +65,9 @@ RSpec.describe "Quick Review telemetry profile", type: :model do
     )
   end
 
-  def profile(semantic_key: nil, preferred_keys: [])
+  def profile(semantic_key: nil, preferred_keys: [], subject: subject_record, selected: selection)
     Ops::TelemetryProfileQuery.new(
-      organization: organization, subject: subject_record,
-      selection: selection, baseline: baseline,
+      organization: organization, subject: subject, range: range, selection: selected,
       semantic_key: semantic_key, preferred_keys: preferred_keys
     )
   end
@@ -158,7 +161,7 @@ RSpec.describe "Quick Review telemetry profile", type: :model do
       # what is in the database and defers judgement to an artifact.)
       row = result.profiles.first.rows.first
       expect(row.members).to contain_exactly(
-        :label, :baseline_count, :selection_count, :baseline_share, :selection_share
+        :label, :handle, :baseline_count, :selection_count, :baseline_share, :selection_share
       )
     end
 
@@ -259,6 +262,172 @@ RSpec.describe "Quick Review telemetry profile", type: :model do
       observe(days_ago: 3)
 
       expect(profile(semantic_key: "health.vital.nonsense").semantic_key).to eq(key)
+    end
+  end
+
+  describe "the dragged selection" do
+    let(:custom) do
+      Ops::TelemetryProfileQuery::Selection.new(
+        from: anchor - 5.days, to: anchor - 2.days, origin: :custom
+      )
+    end
+
+    # Baseline is the complement, so a region in the MIDDLE of the range still
+    # has a baseline on both sides of it. A contiguous baseline window could
+    # not express that.
+    it "compares the selection against everything outside it, not against a window before it" do
+      observe(days_ago: 20)
+      observe(days_ago: 4)
+      observe(days_ago: 1)
+
+      stats = profile(selected: custom).coverage_stats.index_by(&:label)
+
+      expect(stats["Readings"].selection).to eq(1)
+      expect(stats["Readings"].baseline).to eq(2)
+    end
+
+    it "restricts the selection to a value box when one is dragged" do
+      observe(days_ago: 4, value: 118)
+      observe(days_ago: 3, value: 165)
+
+      boxed = Ops::TelemetryProfileQuery::Selection.new(
+        from: anchor - 6.days, to: anchor, value_min: 150, value_max: 170, origin: :custom
+      )
+      stats = profile(selected: boxed).coverage_stats.index_by(&:label)
+
+      expect(stats["Readings"].selection).to eq(1)
+      expect(stats["Readings"].baseline).to eq(1)
+      expect(profile(selected: boxed)).to be_conditioned_on_value
+    end
+
+    # Selecting on the outcome and then reporting which dimensions differ is a
+    # hypothesis generator; the differences may exist BECAUSE of the selection.
+    # The flag is what the view hangs its warning on.
+    it "flags a value-bounded selection and does not flag a time-only one" do
+      expect(profile(selected: custom)).not_to be_conditioned_on_value
+    end
+
+    # A time-only selection owns its days outright. A value-bounded one does
+    # not: a day inside its time range still contributes baseline readings for
+    # values outside the box, so both sides see that day. Subtracting anyway
+    # printed "21/20" — a numerator above its own denominator.
+    describe "the coverage denominator" do
+      before do
+        observe(days_ago: 20, value: 118)
+        observe(days_ago: 3, value: 165)
+      end
+
+      # The day-20 reading is outside the selection, the day-3 reading is
+      # inside it, and the denominator is the 25 days the selection leaves.
+      it "gives the baseline the days the selection does not take" do
+        stats = profile(selected: custom).coverage_stats.index_by(&:label)
+
+        expect(stats["Days with a reading"].baseline).to eq("1/25")
+        expect(stats["Days with a reading"].selection).to eq("1/3")
+      end
+
+      it "gives the baseline the whole range when the selection is a value box" do
+        boxed = Ops::TelemetryProfileQuery::Selection.new(
+          from: range.from, to: range.to, value_min: 150, value_max: 170, origin: :custom
+        )
+        stats = profile(selected: boxed).coverage_stats.index_by(&:label)
+
+        covered, total = stats["Days with a reading"].baseline.split("/").map(&:to_i)
+        expect(total).to eq(range.days)
+        expect(covered).to be <= total
+      end
+    end
+
+    describe "parsing untrusted parameters" do
+      it "reads a well-formed region" do
+        parsed = Ops::TelemetryProfileQuery::Selection.from_params(
+          from: (anchor - 5.days).iso8601, to: (anchor - 2.days).iso8601, vmin: "150", vmax: "120"
+        )
+
+        expect(parsed.from).to eq(anchor - 5.days)
+        # Bounds arrive in whichever order the drag produced them.
+        expect([ parsed.value_min, parsed.value_max ]).to eq([ 120.0, 150.0 ])
+      end
+
+      it "returns nothing for junk rather than raising" do
+        expect(Ops::TelemetryProfileQuery::Selection.from_params(from: "nonsense", to: "?")).to be_nil
+        expect(Ops::TelemetryProfileQuery::Selection.from_params({})).to be_nil
+      end
+
+      it "refuses an inverted or empty region" do
+        expect(Ops::TelemetryProfileQuery::Selection.from_params(
+          from: anchor.iso8601, to: (anchor - 1.day).iso8601
+        )).to be_nil
+      end
+
+      # A drag that runs a day past the edge is a fat finger, not an attack.
+      it "clamps a region that overruns the chart" do
+        overrun = Ops::TelemetryProfileQuery::Selection.new(
+          from: anchor - 90.days, to: anchor + 90.days, origin: :custom
+        )
+
+        clamped = overrun.clamp_to(range)
+
+        expect(clamped.from).to eq(range.from)
+        expect(clamped.to).to eq(range.to)
+      end
+
+      it "gives up on a region entirely outside the chart" do
+        outside = Ops::TelemetryProfileQuery::Selection.new(
+          from: anchor + 10.days, to: anchor + 20.days, origin: :custom
+        )
+
+        expect(outside.clamp_to(range)).to be_nil
+      end
+    end
+  end
+
+  describe "cohort mode (Explore)" do
+    it "drops the focus subject's marks and profiles the whole organization" do
+      other = Subject.create!(organization: organization, timezone: "UTC")
+      observe(days_ago: 3, value: 120)
+      observe(days_ago: 3, value: 122, subject: other, minute: 1)
+
+      result = profile(subject: nil)
+
+      expect(result).not_to be_focused
+      expect(result.readings).to be_empty
+      expect(result.days_without_readings).to be_empty
+      expect(result.coverage_stats.index_by(&:label)["Readings"].selection).to eq(2)
+    end
+
+    # "Which subjects are in this region" is the question a cohort heatmap
+    # exists to answer — and the handle stays opaque (HO §92).
+    it "adds a subject dimension that never leaves the opaque handle" do
+      other = Subject.create!(organization: organization, timezone: "UTC")
+      observe(days_ago: 3)
+      observe(days_ago: 3, subject: other, minute: 1)
+
+      subject_profile = profile(subject: nil).profiles.find { |d| d.key == :subject }
+
+      expect(subject_profile.kind).to eq(:identity)
+      expect(subject_profile.rows.map(&:label))
+        .to contain_exactly(subject_record.public_id, other.public_id)
+    end
+
+    it "does not add a subject dimension when focused on one subject" do
+      observe(days_ago: 3)
+
+      expect(profile.profiles.map(&:key)).not_to include(:subject)
+    end
+
+    # No silent caps: a top-N that does not say so reads as "these are all".
+    it "folds a long tail into one row and says how many it folded" do
+      12.times do |index|
+        extra = Subject.create!(organization: organization, timezone: "UTC")
+        observe(days_ago: 3, subject: extra, minute: index + 2)
+      end
+
+      subject_profile = profile(subject: nil).profiles.find { |d| d.key == :subject }
+
+      expect(subject_profile.rows.length).to eq(Ops::TelemetryProfileQuery::MAX_ROWS + 1)
+      expect(subject_profile.rows.last.label).to match(/\Aother \(\d+\)\z/)
+      expect(subject_profile.truncated_from).to eq(12)
     end
   end
 

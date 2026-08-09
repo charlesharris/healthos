@@ -1,40 +1,56 @@
-<%# The distribution chart for Quick Review.
+<%# The distribution chart.
 
     Two layers, drawn differently because they answer different questions:
 
       · program density — the whole organization's readings on these axes.
         This is the layer that can carry a heatmap, because 47 subjects
-        measuring daily actually fills one. CONTEXT ONLY: the monitor that
-        raised this Case looked at one subject, and a between-subject
-        position is not the evidence for it.
+        measuring daily actually fills one. On Quick Review it is CONTEXT
+        ONLY: the monitor that raised the Case looked at one subject, and a
+        between-subject position is not the evidence for it (STAT-021).
 
-      · this subject's readings — discrete marks, because twenty-one readings
-        cannot fill a heatmap and binning them into cells of exactly 1 would
-        imply a density that is not in the data.
+      · the focus subject's readings — discrete marks, because twenty-one
+        readings cannot fill a heatmap and binning them into cells of exactly
+        1 would imply a density that is not in the data. Absent on Explore,
+        which has no focus subject.
 
-    Locals: profile, case_record, drawer. %>
+    Drag a region to compare it against everything outside it. The selection
+    is a URL, so it is linkable, back/forward work, and the server recomputes
+    it through the same tenant-scoped query as any other request.
+
+    Locals: profile, base_path, frame_id, key_param. %>
 <% geometry = telemetry_geometry(profile) %>
 <% scale = density_scale(profile.max_cell_count) %>
 <% selection_span = telemetry_window_span(profile, profile.selection, geometry) %>
-<% baseline_span = telemetry_window_span(profile, profile.baseline, geometry) %>
+<% frame_id ||= nil %>
 
-<figure class="chart">
+<figure class="chart"
+        data-controller="chart-select"
+        data-chart-select-left-value="<%= geometry.plot_left %>"
+        data-chart-select-top-value="<%= geometry.plot_top %>"
+        data-chart-select-width-value="<%= geometry.plot_width %>"
+        data-chart-select-height-value="<%= geometry.plot_height %>"
+        data-chart-select-start-ms-value="<%= geometry.start_ms %>"
+        data-chart-select-end-ms-value="<%= geometry.end_ms %>"
+        data-chart-select-value-min-value="<%= geometry.value_min %>"
+        data-chart-select-value-max-value="<%= geometry.value_max %>"
+        data-chart-select-url-value="<%= url_for(base_path.merge(key_param => profile.semantic_key)) %>"
+        data-chart-select-frame-value="<%= frame_id %>">
+
   <figcaption class="chart-head">
     <span class="chart-title">
       <%= profile.semantic_key.split(".").last.tr("_", " ").capitalize %>
       <% if profile.unit.present? %><span class="chart-unit"><%= profile.unit %></span><% end %>
     </span>
 
-    <%# Which measure is plotted. Only keys this subject actually has data
-        for — the switcher offers what exists, not what a domain pack hopes
-        exists. %>
+    <%# Only keys with data here — the switcher offers what exists, not what a
+        domain pack hopes exists. %>
     <% if profile.available_keys.length > 1 %>
       <span class="chart-keys">
         <% profile.available_keys.each do |key| %>
           <%= link_to key.split(".").last.tr("_", " "),
-                      ops_case_path(case_record, key: key),
+                      url_for(base_path.merge(key_param => key, **profile.selection.to_params)),
                       class: class_names("chart-key", "is-active" => key == profile.semantic_key),
-                      data: { turbo_frame: drawer ? "case_drawer" : "_top" } %>
+                      data: { turbo_frame: frame_id || "_top" } %>
         <% end %>
       </span>
     <% end %>
@@ -42,7 +58,7 @@
 
   <svg class="chart-plot" viewBox="<%= geometry.view_box %>" role="img"
        aria-label="<%= profile.semantic_key %> over <%= profile.days.length %> days.
-                   Program reading density with this subject's readings overlaid.
+                   Program reading density<%= ", with the subject's readings overlaid" if profile.focused? %>.
                    Full values in the table below.">
     <defs>
       <pattern id="viz-hatch" width="4" height="4" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
@@ -50,8 +66,6 @@
       </pattern>
     </defs>
 
-    <%# Program density. One hue, light→dark, five classes with published
-        edges (see the legend). %>
     <% profile.cohort_cells.each do |cell| %>
       <rect class="viz-cell-<%= density_step_for(cell.count, profile.max_cell_count) %>"
             x="<%= geometry.x_for_day(cell.day_index).round(2) %>"
@@ -60,136 +74,167 @@
             height="<%= geometry.band_height.round(2) %>"></rect>
     <% end %>
 
-    <%# Horizontal rules at band EDGES, labelled with the edge value.
-
-        Labelling `y_for_band(i)` with `bands[i]` put every tick one band too
-        low: y_for_band(0) is the top of the 100–110 band, which is the 110
-        line, and it read "100". The chart's own median line then disagreed
-        with the median printed in the card beneath it by exactly one band —
-        the data was right and the axis was lying. %>
+    <%# Rules at band EDGES, labelled with the edge value. Labelling
+        y_for_band(i) with bands[i] put every tick one band low, and the
+        chart's own median then disagreed with the median printed beside it. %>
     <% (profile.value_bands + [ geometry.value_max ]).each_with_index do |edge, index| %>
       <% y = geometry.y_for_value(edge) %>
       <% if index.positive? %>
-        <line class="viz-grid"
-              x1="<%= geometry.plot_left %>" x2="<%= geometry.plot_right %>"
+        <line class="viz-grid" x1="<%= geometry.plot_left %>" x2="<%= geometry.plot_right %>"
               y1="<%= y.round(2) %>" y2="<%= y.round(2) %>"></line>
       <% end %>
-      <text class="viz-tick" text-anchor="end"
-            x="<%= geometry.plot_left - 6 %>"
+      <text class="viz-tick" text-anchor="end" x="<%= geometry.plot_left - 6 %>"
             y="<%= (y + 3).round(2) %>"><%= edge.to_i %></text>
     <% end %>
 
-    <%# Days this subject did not measure. Hatched at the foot of the plot —
-        not blank, and emphatically not zero (STAT-002). %>
+    <%# Days the focus subject did not measure. Hatched at the foot of the
+        plot — not blank, and emphatically not zero (STAT-002). %>
     <% profile.days_without_readings.each do |day| %>
       <% index = profile.days.index(day) %>
       <% next if index.nil? %>
-      <rect class="viz-missing"
-            x="<%= geometry.x_for_day(index).round(2) %>"
+      <rect class="viz-missing" x="<%= geometry.x_for_day(index).round(2) %>"
             y="<%= (geometry.plot_bottom - 5).round(2) %>"
             width="<%= geometry.cell_width.round(2) %>" height="5"></rect>
     <% end %>
 
-    <%# The selection window the monitor actually looked at, outlined the way
-        Honeycomb outlines a dragged region. Drawn over the density, under the
-        readings. %>
+    <%# The current selection. A box when it is value-bounded, a full-height
+        column when it is only a time range — so the shape says which. %>
     <% if selection_span %>
       <rect class="viz-window-outline"
-            x="<%= selection_span[:x].round(2) %>" y="<%= geometry.plot_top %>"
+            x="<%= selection_span[:x].round(2) %>"
+            y="<%= (profile.conditioned_on_value? ? geometry.y_for_value(profile.selection.value_max) : geometry.plot_top).round(2) %>"
             width="<%= selection_span[:width].round(2) %>"
-            height="<%= geometry.plot_height.round(2) %>" rx="2"></rect>
+            height="<%= (profile.conditioned_on_value? ?
+                          (geometry.y_for_value(profile.selection.value_min) - geometry.y_for_value(profile.selection.value_max)) :
+                          geometry.plot_height).round(2) %>" rx="2"></rect>
     <% end %>
 
-    <%# Per-window medians for this subject. Descriptive: a level, not a claim
-        about why the level moved. %>
-    <% [ [ profile.baseline, "baseline" ], [ profile.selection, "selection" ] ].each do |window, kind| %>
-      <% window_readings = profile.readings_in(window).reject { |r| r.value.nil? } %>
-      <% next if window_readings.empty? %>
-      <% values = window_readings.map(&:value).sort %>
-      <% midpoint = values[values.length / 2] %>
-      <%# Clipped to the days that actually carry readings, not to the whole
-          window. The baseline window opens seven days before this subject
-          started reporting, and a median line drawn across that gap would
-          assert a level for days with no measurement. %>
-      <% first = profile.days.index(window_readings.first.at.to_date) %>
-      <% last = profile.days.index(window_readings.last.at.to_date) %>
-      <% next if first.nil? || last.nil? %>
-      <line class="viz-median viz-median-<%= kind %>"
-            x1="<%= geometry.day_center(first).round(2) %>"
-            x2="<%= geometry.day_center(last).round(2) %>"
-            y1="<%= geometry.y_for_value(midpoint).round(2) %>"
-            y2="<%= geometry.y_for_value(midpoint).round(2) %>">
-        <title><%= kind %> median <%= midpoint %> <%= profile.unit %> (n=<%= values.length %>)</title>
-      </line>
+    <%# Medians. The baseline is now everything outside the selection, which
+        need not be contiguous, so its line spans the plot; the selection's
+        spans the selection. Both descriptive: a level, not a claim about why
+        the level moved. %>
+    <% if profile.focused? %>
+      <% { "baseline" => [ profile.baseline_readings, geometry.plot_left, geometry.plot_right ],
+           "selection" => [ profile.selection_readings, selection_span&.fetch(:x),
+                            selection_span && selection_span[:x] + selection_span[:width] ] }.each do |kind, (rows, x1, x2)| %>
+        <% values = rows.filter_map(&:value).sort %>
+        <% next if values.empty? || x1.nil? %>
+        <% midpoint = values[values.length / 2] %>
+        <line class="viz-median viz-median-<%= kind %>"
+              x1="<%= x1.round(2) %>" x2="<%= x2.round(2) %>"
+              y1="<%= geometry.y_for_value(midpoint).round(2) %>"
+              y2="<%= geometry.y_for_value(midpoint).round(2) %>">
+          <title><%= kind %> median <%= midpoint %> <%= profile.unit %> (n=<%= values.length %>)</title>
+        </line>
+      <% end %>
+
+      <% profile.readings.each do |reading| %>
+        <% next if reading.value.nil? %>
+        <% index = profile.days.index(reading.at.to_date) %>
+        <% next if index.nil? %>
+        <circle class="viz-reading <%= "viz-reading-baseline" unless profile.selection.cover?(reading.at, reading.value) %>"
+                cx="<%= geometry.day_center(index).round(2) %>"
+                cy="<%= geometry.y_for_value(reading.value).round(2) %>" r="5">
+          <title><%= l(reading.at.in_time_zone, format: :short) %> — <%= reading.value %> <%= profile.unit %>
+            (<%= reading.recording_method&.tr("_", " ") %>)</title>
+        </circle>
+      <% end %>
     <% end %>
 
-    <%# This subject's readings. %>
-    <% profile.readings.each do |reading| %>
-      <% next if reading.value.nil? %>
-      <% index = profile.days.index(reading.at.to_date) %>
-      <% next if index.nil? %>
-      <circle class="viz-reading <%= "viz-reading-baseline" unless profile.selection.cover?(reading.at) %>"
-              cx="<%= geometry.day_center(index).round(2) %>"
-              cy="<%= geometry.y_for_value(reading.value).round(2) %>"
-              r="5">
-        <title><%= l(reading.at.in_time_zone, format: :short) %> — <%= reading.value %> <%= profile.unit %>
-          (<%= reading.recording_method&.tr("_", " ") %>)</title>
-      </circle>
-    <% end %>
-
-    <%# Axes. %>
     <line class="viz-axis" x1="<%= geometry.plot_left %>" x2="<%= geometry.plot_right %>"
           y1="<%= geometry.plot_bottom %>" y2="<%= geometry.plot_bottom %>"></line>
 
     <% telemetry_day_ticks(profile).each do |index, day| %>
-      <text class="viz-tick" text-anchor="middle"
-            x="<%= geometry.day_center(index).round(2) %>"
+      <text class="viz-tick" text-anchor="middle" x="<%= geometry.day_center(index).round(2) %>"
             y="<%= geometry.plot_bottom + 13 %>"><%= l(day, format: :short) %></text>
     <% end %>
 
-    <%# Window brackets, labelled in words beneath the axis so the two regions
-        are named rather than left to the colour legend. %>
-    <% if baseline_span %>
-      <line class="viz-window-rule viz-window-rule-baseline"
-            x1="<%= baseline_span[:x].round(2) %>" x2="<%= (baseline_span[:x] + baseline_span[:width]).round(2) %>"
-            y1="<%= geometry.plot_bottom + 22 %>" y2="<%= geometry.plot_bottom + 22 %>"></line>
-      <text class="viz-window-label" text-anchor="middle"
-            x="<%= (baseline_span[:x] + baseline_span[:width] / 2).round(2) %>"
-            y="<%= geometry.plot_bottom + 33 %>">baseline · <%= profile.baseline.days %>d</text>
-    <% end %>
+    <%# Brackets. Baseline runs the full width because it is "everything the
+        selection is not", which is not necessarily contiguous. %>
+    <line class="viz-window-rule viz-window-rule-baseline"
+          x1="<%= geometry.plot_left %>" x2="<%= geometry.plot_right %>"
+          y1="<%= geometry.plot_bottom + 22 %>" y2="<%= geometry.plot_bottom + 22 %>"></line>
     <% if selection_span %>
       <line class="viz-window-rule"
-            x1="<%= selection_span[:x].round(2) %>" x2="<%= (selection_span[:x] + selection_span[:width]).round(2) %>"
+            x1="<%= selection_span[:x].round(2) %>"
+            x2="<%= (selection_span[:x] + selection_span[:width]).round(2) %>"
             y1="<%= geometry.plot_bottom + 22 %>" y2="<%= geometry.plot_bottom + 22 %>"></line>
       <text class="viz-window-label" text-anchor="middle"
             x="<%= (selection_span[:x] + selection_span[:width] / 2).round(2) %>"
             y="<%= geometry.plot_bottom + 33 %>">selection · <%= profile.selection.days %>d</text>
     <% end %>
 
-    <%# Hit targets wider than the marks, one per day. %>
+    <%# Hover readout, one target per day column, wider than the marks. %>
     <% profile.days.each_with_index do |day, index| %>
       <% day_readings = profile.readings.select { |r| r.at.to_date == day } %>
-      <rect class="viz-hit"
-            x="<%= geometry.x_for_day(index).round(2) %>" y="<%= geometry.plot_top %>"
+      <rect class="viz-hit" x="<%= geometry.x_for_day(index).round(2) %>" y="<%= geometry.plot_top %>"
             width="<%= geometry.cell_width.round(2) %>" height="<%= geometry.plot_height.round(2) %>">
-        <title><%= l(day, format: :long) %> — <%= day_readings.empty? ? "no reading from this subject" :
-          day_readings.filter_map(&:value).join(", ") %></title>
+        <title><%= l(day, format: :long) %> — <%= profile.focused? ?
+          (day_readings.empty? ? "no reading from this subject" : day_readings.filter_map(&:value).join(", ")) :
+          "#{profile.cohort_cells.select { |c| c.day_index == index }.sum(&:count)} readings" %></title>
       </rect>
     <% end %>
+
+    <%# The drag surface sits on top of everything, so it must not swallow the
+        per-day tooltips — pointer-events stay on, but the <title> elements
+        below still resolve because the browser hit-tests the whole stack for
+        tooltip text. %>
+    <rect class="viz-drag-surface" data-chart-select-target="surface"
+          x="<%= geometry.plot_left %>" y="<%= geometry.plot_top %>"
+          width="<%= geometry.plot_width %>" height="<%= geometry.plot_height %>"
+          data-action="pointerdown->chart-select#start pointermove->chart-select#move
+                       pointerup->chart-select#finish pointercancel->chart-select#cancel"></rect>
+
+    <rect class="viz-drag-rect" data-chart-select-target="rect" hidden
+          x="0" y="0" width="0" height="0" rx="2"></rect>
   </svg>
 
+  <%# What is selected, and how to get back. %>
+  <div class="chart-selection">
+    <span class="chart-selection-live" data-chart-select-target="readout" hidden></span>
+
+    <% if profile.selection.none? %>
+      <span class="chart-selection-current muted">Nothing selected yet.</span>
+    <% else %>
+      <span class="chart-selection-current">
+        <span class="legend-dot" style="background: var(--viz-selection)"></span>
+        <strong><%= l(profile.selection.from.in_time_zone, format: :short) %>
+          – <%= l(profile.selection.to.in_time_zone, format: :short) %></strong>
+        <% if profile.conditioned_on_value? %>
+          · <%= profile.selection.value_min.round %>–<%= profile.selection.value_max.round %> <%= profile.unit %>
+        <% end %>
+        <span class="muted">
+          <% if profile.selection.from_signal? %>
+            — the window the monitor looked at
+          <% else %>
+            — your selection
+          <% end %>
+        </span>
+      </span>
+    <% end %>
+
+    <% unless profile.selection.from_signal? || profile.selection.none? %>
+      <%= link_to "Reset", url_for(base_path.merge(key_param => profile.semantic_key)),
+                  class: "btn btn-ghost btn-sm", data: { turbo_frame: frame_id || "_top" } %>
+    <% end %>
+
+    <span class="chart-selection-hint muted">drag on the chart to compare a region</span>
+  </div>
+
   <div class="chart-legend">
-    <span class="legend-item">
-      <span class="legend-dot" style="background: var(--viz-baseline)"></span> subject · baseline
-    </span>
-    <span class="legend-item">
-      <span class="legend-dot" style="background: var(--viz-selection)"></span> subject · selection
-    </span>
-    <span class="legend-item">
-      <span class="legend-swatch viz-missing-swatch"
-            style="background: repeating-linear-gradient(45deg, var(--text-faint) 0 1px, transparent 1px 3px)"></span>
-      no reading that day
-    </span>
+    <% if profile.focused? %>
+      <span class="legend-item">
+        <span class="legend-dot" style="background: var(--viz-baseline)"></span> subject · baseline
+      </span>
+      <span class="legend-item">
+        <span class="legend-dot" style="background: var(--viz-selection)"></span> subject · selection
+      </span>
+      <span class="legend-item">
+        <span class="legend-swatch"
+              style="background: repeating-linear-gradient(45deg, var(--text-faint) 0 1px, transparent 1px 3px)"></span>
+        no reading that day
+      </span>
+    <% end %>
     <span class="legend-item">
       program density
       <span class="legend-ramp">
@@ -203,32 +248,55 @@
     </span>
   </div>
 
-  <%# The table-view twin. Nothing in this chart is encoded in colour alone. %>
+  <%# Keyboard and no-JavaScript path to the same thing the drag does. The
+      drag is an accelerator, never the only way in. %>
+  <details class="chart-table">
+    <summary>Set a selection by date</summary>
+    <%= form_with url: url_for(base_path), method: :get, class: "filterbar", data: { turbo_frame: frame_id || "_top" } do %>
+      <%= hidden_field_tag key_param, profile.semantic_key, id: nil %>
+      <div class="filter">
+        <%= label_tag :from, "From" %>
+        <%= date_field_tag :from, profile.selection.from.to_date, id: nil %>
+      </div>
+      <div class="filter">
+        <%= label_tag :to, "To" %>
+        <%= date_field_tag :to, profile.selection.to.to_date, id: nil %>
+      </div>
+      <%= submit_tag "Compare", class: "btn btn-sm" %>
+    <% end %>
+  </details>
+
+  <%# The table-view twin. Nothing here is encoded in colour alone. %>
   <details class="chart-table">
     <summary>Table view — every value in this chart</summary>
     <div class="chart-table-scroll">
       <table class="data">
         <thead>
-          <tr><th>Day</th><th>Window</th><th>This subject</th><th>Method</th><th>Program readings</th></tr>
+          <tr>
+            <th>Day</th><th>Region</th>
+            <% if profile.focused? %><th>This subject</th><th>Method</th><% end %>
+            <th>Program readings</th>
+          </tr>
         </thead>
         <tbody>
           <% profile.days.each_with_index do |day, index| %>
             <% day_readings = profile.readings.select { |r| r.at.to_date == day } %>
-            <% program = profile.cohort_cells.select { |c| c.day_index == index }.sum(&:count) %>
             <tr>
               <td class="tnum"><%= l(day, format: :long) %></td>
               <td class="tiny muted">
                 <%= profile.selection.cover?(day.in_time_zone) ? "selection" : "baseline" %>
               </td>
-              <td class="tnum">
-                <% if day_readings.empty? %>
-                  <span class="faint">no reading</span>
-                <% else %>
-                  <%= day_readings.filter_map(&:value).join(", ") %>
-                <% end %>
-              </td>
-              <td class="tiny muted"><%= day_readings.map { |r| r.recording_method&.tr("_", " ") }.uniq.join(", ") %></td>
-              <td class="tnum"><%= program %></td>
+              <% if profile.focused? %>
+                <td class="tnum">
+                  <% if day_readings.empty? %>
+                    <span class="faint">no reading</span>
+                  <% else %>
+                    <%= day_readings.filter_map(&:value).join(", ") %>
+                  <% end %>
+                </td>
+                <td class="tiny muted"><%= day_readings.map { |r| r.recording_method&.tr("_", " ") }.uniq.join(", ") %></td>
+              <% end %>
+              <td class="tnum"><%= profile.cohort_cells.select { |c| c.day_index == index }.sum(&:count) %></td>
             </tr>
           <% end %>
         </tbody>

@@ -59,7 +59,10 @@ module Ops
       # TelemetryProfileQuery. `semantic_key` lets an operator switch which
       # measure is plotted; the query ignores a key the subject has no data
       # for rather than rendering an empty chart for a typo.
-      @telemetry = detail.telemetry_profile(semantic_key: params[:key].presence)
+      @telemetry = detail.telemetry_profile(
+        semantic_key: params[:key].presence,
+        selection: TelemetryProfileQuery::Selection.from_params(params)
+      )
     end
 
     private

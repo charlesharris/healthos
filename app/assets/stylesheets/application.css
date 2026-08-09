@@ -1388,6 +1388,41 @@ html.drawer-open .main { padding-right: calc(var(--drawer-w) + 1.5rem); }
 .viz-hit { fill: transparent; }
 .viz-hit:hover { fill: var(--text); opacity: 0.05; }
 
+/* The drag surface covers the plot. It is transparent to sight and opaque to
+   the pointer; the per-day <title> tooltips below it still resolve because the
+   browser walks the whole hit stack for tooltip text. */
+.viz-drag-surface { fill: transparent; cursor: crosshair; touch-action: none; }
+
+.viz-drag-rect {
+  fill: var(--viz-selection);
+  fill-opacity: 0.12;
+  stroke: var(--viz-selection);
+  stroke-width: 1.5;
+  pointer-events: none;
+}
+
+.chart-selection {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  margin-top: 0.5rem;
+  padding: 0.35rem 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-sunken);
+  font-size: 0.75rem;
+}
+.chart-selection-current { display: inline-flex; align-items: center; gap: 0.35rem; }
+.chart-selection-live {
+  font-family: var(--mono);
+  font-size: 0.6875rem;
+  color: var(--viz-selection);
+  font-weight: 600;
+}
+.chart-selection-hint { margin-left: auto; font-size: 0.6875rem; }
+@media (hover: none) { .chart-selection-hint { display: none; } }
+
 .chart-legend {
   display: flex;
   align-items: center;
@@ -1417,7 +1452,7 @@ html.drawer-open .main { padding-right: calc(var(--drawer-w) + 1.5rem); }
 
 /* ---- "What was different?" dimension strip ---------------------------- */
 
-.dims { display: grid; grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr)); gap: 0.6rem; }
+.dims { display: grid; grid-template-columns: repeat(auto-fill, minmax(17.5rem, 1fr)); gap: 0.6rem; }
 
 .dim {
   border: 1px solid var(--border);
@@ -1439,15 +1474,25 @@ html.drawer-open .main { padding-right: calc(var(--drawer-w) + 1.5rem); }
 .dim-note { font-size: 0.6875rem; color: var(--text-muted); margin-top: 0.45rem; }
 
 .dim-row { margin-bottom: 0.4rem; }
+/* Wraps to two lines rather than shredding a long value (a subject handle is
+   23 monospace characters and will never share a line with its numbers in a
+   17rem card). The numbers stay on one unbroken line either way. */
 .dim-row-head {
   display: flex;
   align-items: baseline;
   gap: 0.4rem;
+  flex-wrap: wrap;
   font-size: 0.6875rem;
   margin-bottom: 0.15rem;
 }
-.dim-row-label { color: var(--text-secondary); }
-.dim-row-values { margin-left: auto; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.dim-row-label { color: var(--text-secondary); max-width: 100%; }
+.dim-row-values {
+  margin-left: auto;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.dim-row-values .counts { margin-left: 0.3rem; }
 
 /* Two thin bars, baseline over selection, sharing one 0–100% scale. Never two
    scales on one plot — the reader would be comparing arbitrary alignments. */

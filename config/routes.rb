@@ -36,6 +36,10 @@ Rails.application.routes.draw do
   # keeps S2C-013 mechanically true: there is no update action on the Case
   # itself to reach.
   namespace :ops do
+    # Cohort-wide exploration (HO §84's promise, applied above the Case).
+    # Read-only and descriptive by construction — see Ops::ExploreController.
+    resource :explore, only: %i[show], controller: "explore"
+
     resources :cases, only: %i[index show] do
       resource :assignment, only: %i[update], controller: "assignments"
       resource :state, only: %i[update], controller: "case_states"

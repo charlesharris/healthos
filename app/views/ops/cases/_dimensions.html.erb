@@ -25,6 +25,7 @@
   <p class="tiny muted" style="margin-bottom:0.5rem">
     <span class="legend-item">
       <span class="legend-swatch" style="background: var(--viz-baseline)"></span> baseline
+      <span class="faint">(everything outside the selection)</span>
     </span>
     &nbsp;
     <span class="legend-item">
@@ -33,6 +34,19 @@
     &nbsp;· descriptive comparison, ordered by contract precedence rather than by
     effect size. Not ranked, and not evidence.
   </p>
+
+  <%# Selecting a value band and then reporting which dimensions differ is a
+      hypothesis generator, not a finding: some of the difference exists
+      BECAUSE of the selection. Honeycomb's BubbleUp has the same property and
+      does not say so; a tool whose whole promise is an honest representation
+      of the available evidence has to. %>
+  <% if profile.conditioned_on_value? %>
+    <p class="note note-warn" style="margin-bottom:0.6rem">
+      This selection is conditioned on the measured value, so dimensions may
+      differ <em>because</em> of how it was drawn rather than for any reason in
+      the subject. Treat it as somewhere to look, never as a result.
+    </p>
+  <% end %>
 
   <div class="dims">
     <%# Coverage first. A share over four readings and a share over forty look
@@ -84,10 +98,11 @@
           <% dimension.rows.each do |row| %>
             <div class="dim-row">
               <div class="dim-row-head">
-                <span class="dim-row-label"><%= row.label %></span>
+                <span class="<%= class_names("dim-row-label truncate", "mono" => row.handle.present?) %>"
+                      title="<%= row.label %>"><%= row.label %></span>
                 <span class="dim-row-values">
-                  <%= format_share(row.baseline_share) %> → <%= format_share(row.selection_share) %>
-                  <span class="faint"><%= row.baseline_count %> → <%= row.selection_count %></span>
+                  <span class="shares"><%= format_share(row.baseline_share) %> → <%= format_share(row.selection_share) %></span>
+                  <span class="faint counts"><%= row.baseline_count %> → <%= row.selection_count %></span>
                 </span>
               </div>
 
@@ -107,6 +122,12 @@
         <p class="dim-note">
           <%= dimension.note %>
           <span class="faint">Denominator <%= dimension.baseline_total %> / <%= dimension.selection_total %> <%= dimension.unit_label %>.</span>
+          <%# No silent caps: a top-N that does not say it is a top-N reads as
+              "these are all of them". %>
+          <% if dimension.truncated_from %>
+            <span class="faint">Showing <%= Ops::TelemetryProfileQuery::MAX_ROWS %> of
+              <%= dimension.truncated_from %> values; the rest are folded into "other".</span>
+          <% end %>
         </p>
       </div>
     <% end %>
