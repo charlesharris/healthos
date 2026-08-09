@@ -59,11 +59,11 @@ STAT-001, 004–009, 012–030, 036–042; S2C-018/019.
 - [x] 003-05 Hypertension `blood_pressure_change` ContextDefinition v1
 
 ### Baseline (Milestone 6)
-- [ ] 003-06 BaselineDefinition config model (§56): eligibility,
+- [x] 003-06 BaselineDefinition config model (§56): eligibility,
       minimum/target units + span, exclusions, source compatibility
 - [x] 003-07 `baseline_instances` with maturity, completeness,
       source_summary, evidence set (§57)
-- [ ] 003-08 `personal_recent` baseline v1 with generic minimums
+- [x] 003-08 `personal_recent` baseline v1 with generic minimums
       (10 usable days / 14-day span; targets 21/28) (STAT-016/017)
 - [x] 003-09 Version tuple + fingerprint capture on all artifacts (§80)
 - [ ] 003-10 Late-data invalidation: overlap detection →
@@ -129,6 +129,48 @@ baseline types beyond personal_recent (phase/cycle/expected-trajectory
 land when a domain needs them — keep BaselineDefinition general).
 
 ## Decision Log
+
+### 2026-08-09 — 003-06/003-08 BaselineDefinition and personal_recent
+
+**SC §20's "there is no universal `normal`" is the whole reason this is a
+class.** A baseline is a stated, defensible answer to "what counts as
+this subject's usual", and different answers are legitimately different.
+`Baselines::Definition` carries a key, version and digest so a Comparison
+can say which question it asked; the eight baseline types SC §20 names
+are all listed, so adding one is visibly joining a known set rather than
+inventing a category.
+
+**The definition reports, the gate decides.** `Definition::Result` gives
+`maturity`, `completeness`, `usable_units`, `calendar_span_days`,
+`missing_by_state` and `source_summary`, and reaches no conclusion about
+whether any of it is good enough. Keeping the judgement out of the
+materializer is what stops an evidence gate hiding somewhere nobody
+reviews it (STAT-044).
+
+**Thresholds are digested.** They are read from governed config, but they
+also go into `parameters` and therefore into the digest — the numbers
+decide what the baseline IS, and a definition that quietly started
+accepting five days instead of ten would otherwise keep its identity.
+
+**`Telemetry::Windows` promoted out of the hypertension pack.** The
+day-aligned half-open window arithmetic was written for the monitors, but
+nothing in it is disease-shaped and the baseline needs exactly the same
+boundaries. Two copies would eventually disagree about a boundary reading,
+and that disagreement surfaces as an unexplainable bias rather than as a
+failure. `Hypertension::MonitorWindows` is now a shim so the monitors keep
+reading the way they did.
+
+**Two spec expectations were wrong, and the rule was right.** Twelve
+CONSECUTIVE usable days looked like it should be `partial` and came out
+`immature`: twelve days span twelve calendar days, short of STAT-016's
+14-day minimum span. Twenty-five consecutive days came out `partial`
+rather than `mature` for the same reason against the 28-day target. Both
+fixtures were rewritten to spread the days out. This is precisely the
+case CLAUDE.md rule 4 covers — the fix is the fixture, never the
+threshold — and it is worth recording that the failure looked at first
+like an off-by-one in `BaselineMaturity`.
+
+
 
 ### 2026-08-09 — 003-02/04/05/09 Context materialization
 
