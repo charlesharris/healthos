@@ -95,18 +95,6 @@ module HealthosPrivileges
       ActiveRecord::Base.establish_connection(config)
       conn = ActiveRecord::Base.connection
 
-      # Rails' internal bookkeeping tables must exist before the app role can
-      # boot, and creating them needs CREATE on schema public — which only the
-      # migrator has. Normally schema load handles this, but a structure.sql
-      # with no migrations in it leaves them absent, and the app role then
-      # fails on `check_all_pending!` with a confusing privilege error rather
-      # than a schema error. Cheap to make unconditional and idempotent.
-      if config.name == "primary"
-        pool = ActiveRecord::Base.connection_pool
-        pool.schema_migration.create_table
-        pool.internal_metadata.create_table
-      end
-
       # The manifest governs the primary database only. The queue database
       # holds Solid Queue's job state, which is mutable by nature and owned by
       # the gem's own schema — health evidence never lives there, so blanket
