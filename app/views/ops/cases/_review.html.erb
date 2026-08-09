@@ -10,7 +10,7 @@
     handle — never a name, never an MRN (HO §84, §92).
 
     Locals: case_record, trigger_attachments, other_attachments, timeline,
-    drawer. %>
+    telemetry, drawer. %>
 <div class="<%= class_names("review", "review-drawer" => drawer) %>">
   <header class="review-head">
     <div class="row-wrap">
@@ -40,6 +40,20 @@
   <div class="review-body">
     <div class="review-columns">
       <div class="review-main">
+        <%# The picture goes above the Signal's own numbers, because "show me
+            what was different" is answered faster by the shape than by a list
+            of attributes — and the attributes are right underneath to check it
+            against. %>
+        <% if telemetry&.any_data? %>
+          <section class="section">
+            <h2 class="section-title">Distribution</h2>
+            <%= render "ops/cases/distribution",
+                       profile: telemetry, case_record: case_record, drawer: drawer %>
+          </section>
+
+          <%= render "ops/cases/dimensions", profile: telemetry %>
+        <% end %>
+
         <section class="section">
           <h2 class="section-title">Why is this here?</h2>
 

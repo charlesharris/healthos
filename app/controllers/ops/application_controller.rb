@@ -64,7 +64,8 @@ module Ops
         locals: { case_record: case_record,
                   trigger_attachments: detail.trigger_attachments,
                   other_attachments: detail.other_attachments,
-                  timeline: detail.timeline }
+                  timeline: detail.timeline,
+                  telemetry: detail.telemetry_profile(semantic_key: params[:key].presence) }
       )
     end
   end

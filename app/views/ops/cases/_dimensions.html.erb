@@ -1,0 +1,139 @@
+<%# "What was different?" — baseline against selection, per dimension.
+
+    The ORDER is the requirement, not the layout. Honeycomb sorts these cards
+    by how different they are; this cannot, because:
+
+      STAT-019/024 — within-subject findings are ranked lexicographically
+        (eligibility → evidence → effect magnitude → stability → quality →
+        domain relevance), never by a single numeric score.
+      STAT-035    — measurement and instrumentation findings take precedence
+        over biological ones regardless of magnitude.
+
+    So a source change that moves 14 readings outranks a 21 mmHg shift, and
+    sorting by effect size would put them the other way round — which is the
+    exact inversion STAT-035 exists to prevent. Coverage comes before both,
+    because every share below is read through its denominator.
+
+    Nothing here carries evidence strength. These are counts and shares of
+    what is in the database; a Difference with a strength attached is an
+    analytical artifact built by Epic 003, and this is a screen.
+
+    Locals: profile. %>
+<section class="section">
+  <h2 class="section-title">What was different?</h2>
+
+  <p class="tiny muted" style="margin-bottom:0.5rem">
+    <span class="legend-item">
+      <span class="legend-swatch" style="background: var(--viz-baseline)"></span> baseline
+    </span>
+    &nbsp;
+    <span class="legend-item">
+      <span class="legend-swatch" style="background: var(--viz-selection)"></span> selection
+    </span>
+    &nbsp;· descriptive comparison, ordered by contract precedence rather than by
+    effect size. Not ranked, and not evidence.
+  </p>
+
+  <div class="dims">
+    <%# Coverage first. A share over four readings and a share over forty look
+        identical on a bar and mean entirely different things. %>
+    <div class="dim">
+      <div class="dim-head">
+        <span class="dim-title">Coverage</span>
+        <span class="dim-kind">denominator</span>
+      </div>
+
+      <div class="dim-stats">
+        <span></span>
+        <span class="head">base</span>
+        <span class="head">sel</span>
+        <% profile.coverage_stats.each do |stat| %>
+          <span class="label" title="<%= stat.note %>"><%= stat.label %></span>
+          <span class="value value-baseline"><%= stat.baseline %></span>
+          <span class="value value-selection"><%= stat.selection %></span>
+        <% end %>
+      </div>
+
+      <p class="dim-note">
+        Readings taken together are one measurement event, not several — repeated
+        readings are not independent n (STAT-004/005/021).
+      </p>
+    </div>
+
+    <%# Measurement behaviour. First-class analyzable data (STAT-003), not
+        metadata about the real data. %>
+    <% profile.profiles.each do |dimension| %>
+      <div class="dim">
+        <div class="dim-head">
+          <span class="dim-title"><%= dimension.label %></span>
+          <span class="dim-kind"><%= dimension.kind %></span>
+        </div>
+
+        <%# A dimension with one value in both windows has nothing to draw two
+            bars of — 100% against 100% is a sentence, not a chart, and three
+            such cards side by side buried the one dimension that did move.
+            "Unchanged" is still reported: an absent instrumentation change is
+            a real answer, and silently dropping the card would leave a reader
+            unable to tell "unchanged" from "never checked". %>
+        <% if dimension.unchanged? %>
+          <p class="dim-unchanged">
+            <span class="dim-unchanged-mark" aria-hidden="true">=</span>
+            unchanged — all readings <strong><%= dimension.rows.first.label %></strong>
+          </p>
+        <% else %>
+          <% dimension.rows.each do |row| %>
+            <div class="dim-row">
+              <div class="dim-row-head">
+                <span class="dim-row-label"><%= row.label %></span>
+                <span class="dim-row-values">
+                  <%= format_share(row.baseline_share) %> → <%= format_share(row.selection_share) %>
+                  <span class="faint"><%= row.baseline_count %> → <%= row.selection_count %></span>
+                </span>
+              </div>
+
+              <%# Two thin bars on one shared 0–100% scale. Never two scales. %>
+              <div class="dim-bars">
+                <div class="dim-bar dim-bar-baseline">
+                  <span style="width: <%= ((row.baseline_share || 0) * 100).round(1) %>%"></span>
+                </div>
+                <div class="dim-bar dim-bar-selection">
+                  <span style="width: <%= ((row.selection_share || 0) * 100).round(1) %>%"></span>
+                </div>
+              </div>
+            </div>
+          <% end %>
+        <% end %>
+
+        <p class="dim-note">
+          <%= dimension.note %>
+          <span class="faint">Denominator <%= dimension.baseline_total %> / <%= dimension.selection_total %> <%= dimension.unit_label %>.</span>
+        </p>
+      </div>
+    <% end %>
+
+    <%# Biology last and explicitly caveated (STAT-035). %>
+    <% if (summary = profile.value_summary) %>
+      <div class="dim">
+        <div class="dim-head">
+          <span class="dim-title">Value level</span>
+          <span class="dim-kind">biological</span>
+        </div>
+
+        <div class="dim-stats">
+          <span></span>
+          <span class="head">base</span>
+          <span class="head">sel</span>
+          <span class="label"><%= summary.label %></span>
+          <span class="value value-baseline"><%= summary.baseline %></span>
+          <span class="value value-selection"><%= summary.selection %></span>
+        </div>
+
+        <p class="dim-note">
+          <%= summary.note %>
+          Read the measurement dimensions first: a change in how a reading is
+          taken can look exactly like a change in the subject.
+        </p>
+      </div>
+    <% end %>
+  </div>
+</section>

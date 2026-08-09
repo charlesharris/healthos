@@ -1262,6 +1262,232 @@ html.drawer-open .main { padding-right: calc(var(--drawer-w) + 1.5rem); }
 .note-warn { background: var(--danger-soft); border-left-color: var(--danger); color: var(--danger); }
 
 /* ======================================================================
+   Visualization
+   ======================================================================
+
+   Every colour below was produced by the data-viz validator, not by eye, and
+   re-running it is how they should be changed:
+
+     density ramp (sequential, one hue, light→dark) — validated --ordinal
+       light on #ffffff: monotone L, adjacent ΔL ≥ 0.06, light end 2.10:1
+       dark  on #1b1d20: monotone L, adjacent ΔL ≥ 0.06, light end 2.26:1
+
+     baseline / selection (categorical, 2 slots) — validated categorical
+       light: worst pair CVD ΔE 20.2, normal-vision ΔE 27.3, both ≥ 3:1
+       dark:  worst pair CVD ΔE 22.6, normal-vision ΔE 24.4, both ≥ 3:1
+
+   Note the series blue is NOT --accent. The UI accent (#1f5c8b) fails the
+   chroma floor at C 0.098 — as a chart series it reads gray and stops doing
+   identity work. It stays the UI accent; charts use the validated step.
+
+   The lightest density step deliberately clears 2:1 rather than receding to
+   the surface. A cell holding one reading has to be distinguishable from a
+   cell holding none, because "measured once" and "never measured" are
+   different facts (STAT-002) and the whole chart is untrustworthy if they
+   render alike. */
+
+:root {
+  --viz-surface: #ffffff;
+  --viz-grid: #ebe9e4;
+  --viz-axis: #cbc8c1;
+  --viz-label: #7d7a73;
+
+  --viz-density-1: #93b8d1;
+  --viz-density-2: #6d9cbd;
+  --viz-density-3: #4a7ea6;
+  --viz-density-4: #2a6087;
+  --viz-density-5: #16405c;
+
+  --viz-baseline: #2a6da3;
+  --viz-selection: #c96a1f;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --viz-surface: #1b1d20;
+    --viz-grid: #2b2e33;
+    --viz-axis: #43474e;
+    --viz-label: #8d8981;
+
+    --viz-density-1: #3a5871;
+    --viz-density-2: #4d7595;
+    --viz-density-3: #6493b5;
+    --viz-density-4: #7fb0d0;
+    --viz-density-5: #a5cdea;
+
+    --viz-baseline: #5093cc;
+    --viz-selection: #c1741f;
+  }
+}
+
+.chart { margin: 0 0 0.75rem; }
+
+/* Anti-pattern guarded: the container grows with its content, so the x-axis
+   band is never cropped into a nested scrollbar. */
+.chart-plot { display: block; width: 100%; height: auto; overflow: visible; }
+
+.chart-head {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.4rem;
+}
+.chart-title { font-size: 0.8125rem; font-weight: 600; }
+.chart-unit { font-size: 0.75rem; color: var(--text-muted); }
+
+.chart-keys { margin-left: auto; display: flex; gap: 0.25rem; }
+.chart-key {
+  font-size: 0.6875rem;
+  font-family: var(--mono);
+  padding: 0.1rem 0.35rem;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  color: var(--text-muted);
+  background: var(--surface-sunken);
+}
+.chart-key.is-active { border-color: var(--accent-border); background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+.chart-key:hover { text-decoration: none; border-color: var(--border-strong); }
+
+/* Gridlines and axes are solid hairlines one shade off the surface — never
+   dashed, which reads as "threshold" when it is only a grid. */
+.viz-grid { stroke: var(--viz-grid); stroke-width: 1; }
+.viz-axis { stroke: var(--viz-axis); stroke-width: 1; }
+.viz-tick { fill: var(--viz-label); font-size: 9px; font-variant-numeric: tabular-nums; }
+.viz-axis-title { fill: var(--viz-label); font-size: 9px; }
+
+.viz-cell-1 { fill: var(--viz-density-1); }
+.viz-cell-2 { fill: var(--viz-density-2); }
+.viz-cell-3 { fill: var(--viz-density-3); }
+.viz-cell-4 { fill: var(--viz-density-4); }
+.viz-cell-5 { fill: var(--viz-density-5); }
+
+/* A 2px surface ring rather than a stroke-coloured border, so overlapping
+   marks separate without a drawn outline. */
+.viz-reading {
+  fill: var(--viz-selection);
+  stroke: var(--viz-surface);
+  stroke-width: 2;
+}
+.viz-reading-baseline { fill: var(--viz-baseline); }
+
+.viz-median { stroke-width: 2; fill: none; }
+.viz-median-baseline { stroke: var(--viz-baseline); }
+.viz-median-selection { stroke: var(--viz-selection); }
+
+.viz-window-outline { fill: none; stroke: var(--viz-selection); stroke-width: 1.5; }
+.viz-window-label { fill: var(--viz-label); font-size: 9px; }
+.viz-window-rule { stroke: var(--viz-selection); stroke-width: 1.5; }
+.viz-window-rule-baseline { stroke: var(--viz-baseline); }
+
+/* A day the subject did not measure. Hatched, not blank and not zero — the
+   one encoding in this chart that exists purely to keep STAT-002 visible. */
+.viz-missing { fill: url(#viz-hatch); }
+.viz-hatch-line { stroke: var(--viz-label); stroke-width: 1; opacity: 0.5; }
+
+.viz-hit { fill: transparent; }
+.viz-hit:hover { fill: var(--text); opacity: 0.05; }
+
+.chart-legend {
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+  flex-wrap: wrap;
+  margin-top: 0.4rem;
+  font-size: 0.6875rem;
+  color: var(--text-muted);
+}
+.legend-item { display: inline-flex; align-items: center; gap: 0.3rem; }
+.legend-swatch { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
+.legend-dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
+.legend-ramp { display: inline-flex; gap: 2px; align-items: center; }
+.legend-ramp .legend-swatch { width: 14px; }
+
+/* The table-view twin. Every value in the chart is reachable here, so nothing
+   is encoded in colour alone. */
+.chart-table { margin-top: 0.5rem; }
+.chart-table summary {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 0.2rem 0;
+}
+.chart-table summary:hover { color: var(--accent); }
+.chart-table-scroll { max-height: 18rem; overflow: auto; margin-top: 0.4rem; }
+
+/* ---- "What was different?" dimension strip ---------------------------- */
+
+.dims { display: grid; grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr)); gap: 0.6rem; }
+
+.dim {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.55rem 0.65rem;
+  background: var(--surface);
+}
+.dim-head { display: flex; align-items: baseline; gap: 0.4rem; margin-bottom: 0.45rem; }
+.dim-title { font-size: 0.75rem; font-weight: 600; }
+.dim-kind {
+  font-size: 0.5625rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  padding: 0 0.2rem;
+}
+.dim-note { font-size: 0.6875rem; color: var(--text-muted); margin-top: 0.45rem; }
+
+.dim-row { margin-bottom: 0.4rem; }
+.dim-row-head {
+  display: flex;
+  align-items: baseline;
+  gap: 0.4rem;
+  font-size: 0.6875rem;
+  margin-bottom: 0.15rem;
+}
+.dim-row-label { color: var(--text-secondary); }
+.dim-row-values { margin-left: auto; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+
+/* Two thin bars, baseline over selection, sharing one 0–100% scale. Never two
+   scales on one plot — the reader would be comparing arbitrary alignments. */
+.dim-bars { display: flex; flex-direction: column; gap: 2px; }
+.dim-bar { height: 6px; background: var(--surface-sunken); border-radius: 3px; overflow: hidden; }
+.dim-bar span { display: block; height: 100%; border-radius: 3px; }
+.dim-bar-baseline span { background: var(--viz-baseline); }
+.dim-bar-selection span { background: var(--viz-selection); }
+
+.dim-unchanged {
+  display: flex;
+  align-items: baseline;
+  gap: 0.35rem;
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  margin: 0;
+}
+.dim-unchanged-mark {
+  font-family: var(--mono);
+  color: var(--text-faint);
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  padding: 0 0.25rem;
+  font-size: 0.6875rem;
+}
+
+.dim-stats { display: grid; grid-template-columns: 1fr auto auto; gap: 0.2rem 0.6rem; font-size: 0.75rem; }
+.dim-stats .label { color: var(--text-muted); }
+.dim-stats .value { font-variant-numeric: tabular-nums; text-align: right; }
+.dim-stats .value-baseline { color: var(--viz-baseline); font-weight: 600; }
+.dim-stats .value-selection { color: var(--viz-selection); font-weight: 600; }
+.dim-stats .head {
+  font-size: 0.5625rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  text-align: right;
+}
+
+/* ======================================================================
    Plain tables (members, invitations, provenance)
    ====================================================================== */
 

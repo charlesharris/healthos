@@ -112,6 +112,64 @@ land), bulk clinical actions.
 
 ## Decision Log
 
+### 2026-08-09 — a BubbleUp-shaped view that obeys the ranking contract
+
+Quick Review now opens with a distribution chart and a baseline-vs-selection
+dimension strip, in the shape of Honeycomb's BubbleUp. Three things had to
+change from that shape to be legal here.
+
+**The cards cannot be sorted by how different they are.** That is BubbleUp's
+defining move and it is precisely what STAT-019/024 forbid for within-subject
+work — ranking is lexicographic, never a single numeric score — and what
+STAT-035 inverts, since measurement and instrumentation findings outrank
+biological ones *regardless of magnitude*. So the order is fixed by contract
+precedence: coverage (the denominators) → measurement dimensions → biology,
+with the biological card carrying an explicit "read the measurement
+dimensions first". Sorting by effect size would put a 21 mmHg shift above the
+source change that might explain it.
+
+**A single subject cannot fill a heatmap.** One subject measuring daily
+produces ~21 readings over the window; binned into day × 10 mmHg cells that is
+21 cells of exactly 1, which is a scatter plot wearing a heatmap's clothes and
+implies a density that is not in the data. Honeycomb has millions of spans;
+hypertension RPM has one reading a day, and no amount of design fixes that.
+
+So the chart has two layers with different jobs. The **density layer** is the
+whole organization on the same axes (964 readings, 45–48/day, cells of 1–24) —
+that genuinely fills a heatmap. It is labelled CONTEXT ONLY, because the
+monitor that raised the Case looked at one subject and a between-subject
+position is not the evidence for it (STAT-021). The **subject layer** is
+discrete marks, which is what 21 readings honestly are.
+
+**Absence had to be visible.** The lightest density step deliberately clears
+2:1 against the surface rather than receding, and days with no reading get an
+explicit hatch — because a cell holding one reading and a cell holding none
+must not render alike (STAT-002). The whole chart is untrustworthy if they do.
+
+`Ops::TelemetryProfileQuery` is deliberately **not** named Comparison or
+Difference. Those are immutable, versioned, digested artifacts pinned into
+saved Investigations (STAT-040/041); this is a live read for a screen. It
+emits counts, shares, denominators and medians, and no evidence strength — the
+completeness gates (STAT-012) and effect-magnitude classes are Epic 003's, and
+faking them here would put an ungoverned gate in a view.
+
+Colours were computed, not chosen: the sequential density ramp and the
+two-series baseline/selection palette were both run through the data-viz
+validator in light and dark against this app's own surfaces. Worth recording
+that the UI accent `#1f5c8b` **fails** the chroma floor at C 0.098 — as a
+chart series it reads gray — so charts use a validated step instead. Its
+replacement is noted in the stylesheet next to the tokens.
+
+Caught by `spec/ops/telemetry_profile_spec.rb`: the y-axis labelled
+`y_for_band(i)` with `bands[i]`, but that y is the *top* of band i, so every
+tick sat one band low and the chart's median line disagreed with the median
+printed beside it by exactly 10 mmHg. The data was right and the axis was
+lying — which is the failure mode worth having a spec for.
+
+Deferred: drag-to-select on the heatmap, and the cohort-wide Explore surface.
+The latter is the Epic 004 workbench and needs Epic 003's Comparison/Difference
+machinery to be more than decorative.
+
 ### 2026-08-09 — the queue and Quick Review were unusable as rendered
 
 Not a new requirement; the epic's own surfaces did not meet the

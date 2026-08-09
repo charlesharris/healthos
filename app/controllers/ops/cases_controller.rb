@@ -54,6 +54,12 @@ module Ops
       @trigger_attachments = detail.trigger_attachments
       @other_attachments = detail.other_attachments
       @timeline = detail.timeline
+
+      # Descriptive only, and explicitly not an analytical artifact — see
+      # TelemetryProfileQuery. `semantic_key` lets an operator switch which
+      # measure is plotted; the query ignores a key the subject has no data
+      # for rather than rendering an empty chart for a typo.
+      @telemetry = detail.telemetry_profile(semantic_key: params[:key].presence)
     end
 
     private
