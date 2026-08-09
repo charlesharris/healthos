@@ -26,11 +26,20 @@ module HealthosEncryptionKeys
   DEV_DETERMINISTIC   = "development_only_deterministic_key_nope_01"
   DEV_KEY_DERIVATION  = "development_only_key_derivation_salt_xx_02"
 
+  # Rails' generated Dockerfile precompiles assets with RAILS_ENV=production,
+  # so a hard raise here fails the image build even though nothing touches the
+  # database. SECRET_KEY_BASE_DUMMY is the signal Rails itself uses to mark
+  # that build-time context; honouring it keeps the production guard while
+  # letting the image build.
+  def self.build_context?
+    ENV["SECRET_KEY_BASE_DUMMY"].present?
+  end
+
   def self.fetch(env_name, development_default)
     value = ENV[env_name]
     return value if value.present?
 
-    if Rails.env.local?
+    if Rails.env.local? || build_context?
       development_default
     else
       raise "#{env_name} must be set outside development and test. " \
