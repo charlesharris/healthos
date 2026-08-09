@@ -385,6 +385,88 @@ RSpec.describe "Quick Review telemetry profile", type: :model do
     end
   end
 
+  # The calculation that was wrong three times in three days, each time in a
+  # new arm of a conditional at the call site: value-bounded selections
+  # ("21/20"), an empty selection, and cohort priors ("21/5").
+  #
+  # This is the property that failed every time, asserted across every
+  # configuration at once rather than one example per bug. A numerator above
+  # its own denominator is worse than no denominator at all.
+  describe "coverage denominators" do
+    let(:configurations) do
+      {
+        "signal window" => { selected: selection, baseline: nil },
+        "custom time range" => {
+          selected: Ops::TelemetryProfileQuery::Selection.new(
+            from: anchor - 12.days, to: anchor - 4.days, origin: :custom
+          ), baseline: nil
+        },
+        "value-bounded box" => {
+          selected: Ops::TelemetryProfileQuery::Selection.new(
+            from: anchor - 20.days, to: anchor, value_min: 118, value_max: 125, origin: :custom
+          ), baseline: nil
+        },
+        "whole range selected" => {
+          selected: Ops::TelemetryProfileQuery::Selection.new(
+            from: range.from, to: range.to, origin: :custom
+          ), baseline: nil
+        },
+        "nothing selected" => {
+          selected: Ops::TelemetryProfileQuery::Selection.new(
+            from: range.to, to: range.to + 1.second, origin: :none
+          ), baseline: nil
+        },
+        "cohort prior" => { selected: selection, baseline: "cohort" }
+      }
+    end
+
+    before do
+      peer = Subject.create!(organization: organization, timezone: "UTC")
+      20.times do |index|
+        observe(days_ago: index + 1, value: 118 + (index % 8))
+        observe(days_ago: index + 1, value: 121 + (index % 5), subject: peer, minute: 1)
+      end
+    end
+
+    it "never reports more covered days than the window has, in any configuration" do
+      configurations.each do |name, options|
+        stat = profile(**options).coverage_stats.index_by(&:label)["Days with a reading"]
+
+        [ stat.baseline, stat.selection ].each do |value|
+          covered, total = value.split("/").map(&:to_i)
+          expect(covered).to be <= total, "#{name}: #{value} has a numerator above its denominator"
+        end
+      end
+    end
+
+    it "never reports a negative or absent denominator, in any configuration" do
+      configurations.each do |name, options|
+        denominators = profile(**options).denominators
+
+        expect(denominators.baseline).to be >= 0, "#{name}: negative baseline denominator"
+        expect(denominators.selection).to be >= 0, "#{name}: negative selection denominator"
+      end
+    end
+
+    # The one configuration where the selection does own its days outright.
+    it "gives the baseline the rest of the range for a plain time selection" do
+      result = profile(selected: Ops::TelemetryProfileQuery::Selection.new(
+        from: anchor - 7.days, to: anchor, origin: :custom
+      ))
+
+      expect(result.denominators.selection).to eq(7)
+      expect(result.denominators.baseline).to eq(range.days - 7)
+    end
+
+    it "gives the baseline the whole range everywhere else" do
+      %w[value-bounded\ box nothing\ selected cohort\ prior].each do |name|
+        result = profile(**configurations.fetch(name))
+
+        expect(result.denominators.baseline).to eq(range.days), name
+      end
+    end
+  end
+
   # SC §20–23, §64. The screen used to compare a selection against "everything
   # outside it" without ever saying so, without reporting how much was in it,
   # and without noticing when there was nothing in it at all — it rendered

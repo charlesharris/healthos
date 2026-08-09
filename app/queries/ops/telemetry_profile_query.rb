@@ -188,7 +188,8 @@ module Ops
     end
 
     def initialize(organization:, range:, selection:, subject: nil, semantic_key: nil,
-                   preferred_keys: [], filters: {}, baseline_mode: nil, membership: nil)
+                   preferred_keys: [], filters: {}, baseline_mode: nil,
+                   value_bands: nil, membership: nil)
       super(organization: organization, membership: membership)
 
       @subject = subject
@@ -198,6 +199,11 @@ module Ops
       @preferred_keys = Array(preferred_keys)
       @filters = (filters || {}).stringify_keys.slice(*FILTERABLE.keys).compact_blank
       @baseline_mode = BASELINE_MODES.include?(baseline_mode.to_s) ? baseline_mode.to_s : DEFAULT_BASELINE_MODE
+      # Small multiples are only comparable on a shared axis. When Explore
+      # splits one measure into panels, every panel is handed the same bands —
+      # otherwise each panel scales to its own data and a quiet facet looks
+      # exactly like a busy one.
+      @value_bands_override = value_bands.presence
     end
 
     attr_reader :subject, :range, :selection, :filters, :baseline_mode
@@ -252,6 +258,30 @@ module Ops
     end
 
     def resolve = self
+
+    # The values a dimension actually takes in this window, busiest first —
+    # what Explore splits into panels.
+    #
+    # An explicit case with literal groupings rather than a grouping string
+    # assembled from the whitelist. The assembled version was safe and
+    # Brakeman flagged it anyway, correctly: a reviewer cannot tell at the
+    # call site that an interpolated fragment came from a frozen constant, and
+    # this is the second time that has come up. Literal call sites are safe by
+    # inspection, which is the property worth having.
+    def distinct_values_for(dimension)
+      scope = keyed(cohort_observations)
+
+      counts =
+        case dimension.to_s
+        when "recording_method" then scope.group(:recording_method).count
+        when "quality_state" then scope.group(:quality_state).count
+        when "source" then scope.joins(:source).group("sources.key").count
+        when "subject" then scope.joins(:subject).group("subjects.public_id").count
+        else {}
+        end
+
+      counts.compact.sort_by { |value, count| [ -count, value.to_s ] }.map(&:first)
+    end
 
     def any_data? = semantic_key.present? && cohort_cells.any?
 
@@ -312,6 +342,8 @@ module Ops
     end
 
     def value_bands
+      return @value_bands_override if @value_bands_override
+
       @value_bands ||= begin
         values = cohort_rows.filter_map { |_, value| value&.to_f } + readings.filter_map(&:value)
         if values.empty?
@@ -403,32 +435,45 @@ module Ops
     # side by side is not a comparison when one of them rests on no days.
     def comparable? = baseline_sufficiency.sufficient? && selection_sufficiency.sufficient?
 
+    # How many days each side's coverage is measured against.
+    #
+    # ONE place, deliberately. This calculation was wrong three times in three
+    # days — once for value-bounded selections ("21/20"), once for an empty
+    # selection, once for cohort priors ("21/5") — and every time the fix was
+    # a new arm on a conditional at the call site. A numerator above its own
+    # denominator is worse than no denominator at all, and it kept shipping
+    # because the rule lived nowhere.
+    #
+    # The rule: a side's denominator is the whole range, minus only the days
+    # the OTHER side exclusively owns. Exclusive ownership happens in exactly
+    # one configuration — a contiguous, time-only selection set against this
+    # subject's own record. Everything else shares its days:
+    #
+    #   value-bounded selection — a day inside its time range still gives the
+    #     baseline readings for values outside the box
+    #   cohort prior           — a different population measured over the whole
+    #     range, which never gave any days up
+    #   no selection           — nothing has been taken
+    #
+    # Adding a baseline mode means answering "does the selection still own its
+    # days outright?" here, once, rather than discovering the answer from a
+    # screenshot.
+    Denominators = Struct.new(:baseline, :selection, keyword_init: true)
+
+    def denominators
+      @denominators ||= Denominators.new(
+        baseline: [ range.days - exclusive_selection_days, 0 ].max,
+        selection: selection.days
+      )
+    end
+
     # Coverage and cadence — the denominators. Before any share, and never a
     # share themselves.
     def coverage_stats
-      # A time-only selection owns its days outright, so the baseline has the
-      # rest. A VALUE-BOUNDED selection does not: a day inside the selection's
-      # time range still contributes baseline readings for values outside the
-      # box, so both sides can see the same day. Subtracting anyway produced
-      # "21/20" — a numerator above its own denominator, which is worse than
-      # no denominator at all.
-      # Only a time-only selection against this subject's own record owns its
-      # days outright, leaving the rest to the baseline. A value-bounded
-      # selection shares its days with the baseline; a cohort prior is a
-      # different population measured over the whole range and never gave any
-      # days up. Subtracting in those cases printed a numerator above its own
-      # denominator — "21/5".
-      baseline_days =
-        if cohort_baseline? || selection.value_bounded? || selection.none?
-          range.days
-        else
-          [ range.days - selection.days, 0 ].max
-        end
-
       [
         Stat.new(label: "Days with a reading",
-                 baseline: "#{covered_days(baseline_readings_scope)}/#{baseline_days}",
-                 selection: "#{covered_days(selection_readings_scope)}/#{selection.days}",
+                 baseline: "#{covered_days(baseline_readings_scope)}/#{denominators.baseline}",
+                 selection: "#{covered_days(selection_readings_scope)}/#{denominators.selection}",
                  note: "Days that produced a reading, out of days in the window."),
         Stat.new(label: "Measurement events",
                  baseline: baseline_readings_scope.distinct.count(:observation_group_id),
@@ -487,6 +532,13 @@ module Ops
     def cohort_prior_scope
       scope = keyed(cohort_observations)
       focused? ? scope.where.not(subject_id: subject.id) : scope
+    end
+
+    # The single condition the denominator rule turns on. See #denominators.
+    def exclusive_selection_days
+      return 0 if cohort_baseline? || selection.none? || selection.value_bounded?
+
+      selection.days
     end
 
     def distinct_days(scope) = scope.distinct.count(Arel.sql("date(observed_at)"))

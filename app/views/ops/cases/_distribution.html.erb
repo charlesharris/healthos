@@ -19,11 +19,16 @@
 
     Locals: profile, base_path, frame_id, key_param. %>
 <% geometry = telemetry_geometry(profile) %>
-<% scale = density_scale(profile.max_cell_count) %>
+<%# One colour scale across every panel of a small-multiple set. Scaling each
+    panel to its own maximum would make a quiet facet look exactly as dense as
+    a busy one. %>
+<% density_max = local_assigns.fetch(:density_max, nil).presence || profile.max_cell_count %>
+<% compact = local_assigns.fetch(:compact, false) %>
+<% scale = density_scale(density_max) %>
 <% selection_span = telemetry_window_span(profile, profile.selection, geometry) %>
 <% frame_id ||= nil %>
 
-<figure class="chart"
+<figure class="<%= class_names("chart", "chart-compact" => compact) %>"
         data-controller="chart-select"
         data-chart-select-left-value="<%= geometry.plot_left %>"
         data-chart-select-top-value="<%= geometry.plot_top %>"
@@ -43,8 +48,10 @@
     </span>
 
     <%# Only keys with data here — the switcher offers what exists, not what a
-        domain pack hopes exists. %>
-    <% if profile.available_keys.length > 1 %>
+        domain pack hopes exists. Hidden in a panel: the set already has one
+        measure control above it, and six copies of it is chrome competing
+        with the data it is meant to be framing. %>
+    <% if profile.available_keys.length > 1 && !compact %>
       <span class="chart-keys">
         <% profile.available_keys.each do |key| %>
           <%= link_to key.split(".").last.tr("_", " "),
@@ -67,7 +74,7 @@
     </defs>
 
     <% profile.cohort_cells.each do |cell| %>
-      <rect class="viz-cell-<%= density_step_for(cell.count, profile.max_cell_count) %>"
+      <rect class="viz-cell-<%= density_step_for(cell.count, density_max) %>"
             x="<%= geometry.x_for_day(cell.day_index).round(2) %>"
             y="<%= geometry.y_for_band(cell.band_index).round(2) %>"
             width="<%= geometry.cell_width.round(2) %>"
@@ -190,7 +197,7 @@
   </svg>
 
   <%# What is selected, and how to get back. %>
-  <div class="chart-selection">
+  <div class="chart-selection" <%= "hidden" if compact %>>
     <span class="chart-selection-live" data-chart-select-target="readout" hidden></span>
 
     <% if profile.selection.none? %>
@@ -221,7 +228,7 @@
     <span class="chart-selection-hint muted">drag on the chart to compare a region</span>
   </div>
 
-  <div class="chart-legend">
+  <div class="chart-legend" <%= "hidden" if compact %>>
     <% if profile.focused? %>
       <span class="legend-item">
         <span class="legend-dot" style="background: var(--viz-baseline)"></span> subject · baseline
@@ -250,7 +257,7 @@
 
   <%# Keyboard and no-JavaScript path to the same thing the drag does. The
       drag is an accelerator, never the only way in. %>
-  <details class="chart-table">
+  <details class="chart-table" <%= "hidden" if compact %>>
     <summary>Set a selection by date</summary>
     <%= form_with url: url_for(base_path), method: :get, class: "filterbar", data: { turbo_frame: frame_id || "_top" } do %>
       <%= hidden_field_tag key_param, profile.semantic_key, id: nil %>

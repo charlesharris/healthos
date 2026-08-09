@@ -112,6 +112,58 @@ land), bulk clinical actions.
 
 ## Decision Log
 
+### 2026-08-09 — small multiples, and one home for the denominator rule
+
+**The denominator rule now lives in one place.** It was wrong three times in
+three days — value-bounded selections ("21/20"), an empty selection, cohort
+priors ("21/5") — and every fix was a new arm on a conditional at the call
+site. It kept shipping because the rule lived nowhere. Stated once now:
+
+> A side's denominator is the whole range, minus only the days the OTHER side
+> exclusively owns. Exclusive ownership happens in exactly one configuration —
+> a contiguous, time-only selection set against this subject's own record.
+
+The spec that goes with it asserts the *property* across every configuration
+at once rather than one example per bug: no numerator may exceed its own
+denominator, in any mode. Verified to fail when the old rule is restored.
+Adding a baseline mode now means answering "does the selection still own its
+days outright?" once, rather than discovering the answer from a screenshot.
+
+**Small multiples.** Honeycomb puts every event on one heatmap because
+everything it plots is `duration_ms`. Health telemetry cannot: mmHg and bpm on
+one axis is the dual-axis chart, which invents a correlation out of an
+arbitrary alignment of two scales. The honest equivalent is one panel per
+measure, or one per value of a dimension.
+
+Splitting by a dimension is also the cohort comparison an operator actually
+wants — device-measured beside manually-entered, over the same days. Two
+sharing rules make the panels mean anything:
+
+* the **colour scale is shared always**, or a facet holding three readings
+  looks exactly as dense as one holding thirty;
+* the **value axis is shared whenever the panels are the same measure**, and
+  deliberately not when they are different measures, because that would be the
+  dual-axis mistake wearing a different hat.
+
+On the demo data this makes DEMO-006 legible in one glance: `manual entry`, 7
+readings, 1 subject, clustered in early August, beside `device automatic`, 956
+readings, 47 subjects, across the whole range.
+
+**The way out of Explore is into work that already exists.** Scoping to a
+subject now lists their Cases, rendered with the queue's own row partial — and
+therefore with the same assign/triage affordances. Not gated on having dragged
+a region: having scoped to someone is already reason enough to want their
+work, and gating it hid the link exactly when it was most useful. Nothing here
+creates a Case; only a Monitor does (S2C-003), and the empty state says so
+rather than offering.
+
+Brakeman again, and the same lesson as last time: the panel lookup assembled a
+`GROUP BY` string from the whitelist. Safe, flagged anyway, and rightly — a
+reviewer cannot tell at the call site that an interpolated fragment came from
+a frozen constant. Replaced with an explicit case of literal groupings, in the
+query object that owns the whitelist. Second occurrence of this exact shape;
+literal call sites are safe by inspection, which is the property worth having.
+
 ### 2026-08-09 — the baseline was invented, unstated, and sometimes empty
 
 Raised from review: "it seems to only compare to the patient's data as a

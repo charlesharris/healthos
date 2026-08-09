@@ -51,6 +51,15 @@
                        data: { action: "change->autosubmit#submit" } %>
   </div>
 
+  <div class="filterbar-divider" aria-hidden="true"></div>
+
+  <div class="filter">
+    <%= label_tag :split, "Split" %>
+    <%= select_tag :split,
+                   options_for_select(Ops::ExploreController::SPLITS.map { |k, v| [ v, k ] }, @split),
+                   data: { action: "change->autosubmit#submit" } %>
+  </div>
+
   <%= submit_tag "Apply", class: "btn btn-sm", data: { autosubmit_target: "submit" } %>
 
   <span class="spacer"></span>
@@ -63,8 +72,57 @@
   <%= render "ops/cases/scope", profile: @telemetry, base_path: selected_base, frame_id: nil %>
 
   <section class="section">
-    <%= render "ops/cases/distribution",
-               profile: @telemetry, base_path: base.except(:key), key_param: :key, frame_id: nil %>
+    <% if @panels.length > 1 %>
+      <%# Small multiples. Honeycomb puts every event on one heatmap because
+          everything it plots is duration_ms; mmHg and bpm on one axis would be
+          the dual-axis chart, which invents a correlation from an arbitrary
+          alignment of two scales. Panels share a colour scale always, and
+          share the value axis whenever they are the same measure. %>
+      <div class="panels">
+        <% @panels.each do |panel| %>
+          <figure class="panel">
+            <figcaption class="panel-head">
+              <span class="panel-title <%= "mono" if panel.sublabel %>"><%= panel.label %></span>
+              <% if panel.sublabel %><span class="panel-sub"><%= panel.sublabel %></span><% end %>
+              <span class="panel-count">
+                <%= pluralize(panel.profile.cohort_cells.sum(&:count), "reading") %>
+                · <%= pluralize(panel.profile.cohort_subject_count, "subject") %>
+              </span>
+              <%# Each panel drills into itself: the same region, scoped to the
+                  facet you clicked. %>
+              <% if panel.panel_filters.any? %>
+                <%= link_to "focus",
+                            scope_path(selected_base, @telemetry.filters, add: panel.panel_filters),
+                            class: "panel-focus" %>
+              <% end %>
+            </figcaption>
+
+            <%= render "ops/cases/distribution",
+                       profile: panel.profile, base_path: base.except(:key),
+                       key_param: :key, frame_id: nil,
+                       density_max: @density_max, compact: true %>
+          </figure>
+        <% end %>
+      </div>
+
+      <div class="chart-legend">
+        <span class="legend-item">
+          reading density (shared across panels)
+          <span class="legend-ramp">
+            <% density_scale(@density_max).each do |band| %>
+              <span class="legend-swatch" style="background: var(--viz-density-<%= band[:step] %>)"
+                    title="<%= band[:low] == band[:high] ? band[:low] : "#{band[:low]}–#{band[:high]}" %> readings"></span>
+            <% end %>
+          </span>
+          <span class="tnum">1–<%= @density_max %> readings</span>
+        </span>
+        <span class="legend-item muted">drag on any panel to select that region</span>
+      </div>
+    <% else %>
+      <%= render "ops/cases/distribution",
+                 profile: @telemetry, base_path: base.except(:key), key_param: :key,
+                 frame_id: nil, density_max: @density_max %>
+    <% end %>
   </section>
 
   <% if @telemetry.selection.none? %>
@@ -76,16 +134,35 @@
   <% else %>
     <%= render "ops/cases/dimensions", profile: @telemetry,
                base_path: selected_base, frame_id: nil %>
+  <% end %>
 
-    <%# The point of noticing something here is to go and look at the work it
-        belongs to. Nothing on this surface creates a Case — only a Monitor
-        does that (S2C-003). %>
+  <%# The way out. Independent of whether a region is selected — having scoped
+      to a subject is already reason enough to want their work, and gating this
+      behind a drag hid it exactly when it was most useful.
+
+      Nothing on this surface creates a Case: only a Monitor does (S2C-003). %>
+  <% if @subject_cases&.any? %>
+    <section class="section">
+      <h2 class="section-title">Cases for this subject</h2>
+      <div class="queue-wrap">
+        <div class="queue" role="table" aria-label="Cases for the scoped subject">
+          <%= render partial: "ops/cases/case_row", collection: @subject_cases, as: :case_record %>
+        </div>
+      </div>
+    </section>
+  <% elsif @telemetry.focused? %>
+    <p class="tiny muted">
+      No Case has been raised for this subject. Work reaches the queue through
+      a Monitor, never from here (S2C-003).
+    </p>
+  <% else %>
     <p class="tiny muted">
       Something worth acting on? It reaches the queue through a Monitor, not
       from here — <%= link_to "open the Ops Queue", ops_cases_path %> to see
       what has already been raised.
     </p>
   <% end %>
+
 <% else %>
   <div class="empty-state">
     <strong>No readings in this range.</strong>

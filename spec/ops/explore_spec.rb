@@ -226,6 +226,101 @@ RSpec.describe "Ops Explore", type: :request do
     end
   end
 
+  # Honeycomb puts every event on one heatmap because everything it plots is
+  # duration_ms. mmHg and bpm on one axis would be the dual-axis chart, which
+  # invents a correlation from an arbitrary alignment of two scales. Small
+  # multiples are the honest equivalent — and they only mean anything if the
+  # panels share their scales.
+  describe "small multiples" do
+    let!(:mine) { Subject.create!(organization: organization, timezone: "UTC") }
+
+    before do
+      seed_reading(org: organization, subject: mine, days_ago: 3, value: 165)
+      seed_reading(org: organization, subject: mine, days_ago: 4, value: 118, minute: 1)
+    end
+
+    it "renders one chart when nothing is split" do
+      get ops_explore_path(**range_params)
+
+      expect(response.body).not_to include("panel-title")
+    end
+
+    it "splits by measure without forcing different units onto one axis" do
+      %w[health.vital.blood_pressure.diastolic health.vital.pulse].each_with_index do |other, index|
+        Observation.create!(
+          organization: organization, subject: mine,
+          source: Source.find_by(organization: organization, key: "cuff"),
+          raw_envelope: RawEnvelope.find_by(organization: organization),
+          source_record_id: "extra-#{index}", semantic_key: other, semantic_version: 1,
+          value_numeric: 70 + index, unit: other.include?("pulse") ? "bpm" : "mmHg",
+          observed_at: anchor - 3.days + 13.hours, normalized_at: Time.current,
+          quality_state: "observed", recording_method: "device_automatic",
+          normalizer_key: "synthetic_bp_json", normalizer_version: 1
+        )
+      end
+
+      get ops_explore_path(**range_params, split: "measure")
+
+      expect(response.body.scan(/class="panel-title/).length).to eq(3)
+    end
+
+    it "falls back to one chart when a dimension has only one value" do
+      get ops_explore_path(**range_params, split: "recording_method")
+
+      expect(response.body).not_to include("panel-title")
+    end
+
+    it "ignores an unknown split rather than failing" do
+      get ops_explore_path(**range_params, split: "nonsense")
+
+      expect(response).to have_http_status(:ok)
+      expect(response.body).not_to include("panel-title")
+    end
+  end
+
+  # Explore notices things; only a Monitor opens a Case (S2C-003), so the way
+  # out of here is into work that already exists.
+  describe "drilling through to existing work" do
+    let!(:mine) { Subject.create!(organization: organization, timezone: "UTC") }
+
+    before { seed_reading(org: organization, subject: mine, days_ago: 3) }
+
+    it "lists the scoped subject's Cases" do
+      case_record = Cases::CaseRecord.create!(
+        organization: organization, subject: mine, domain_key: "hypertension",
+        case_type: "blood_pressure_change", title: "Blood pressure pattern change",
+        status: "new", review_priority: "today",
+        started_at: anchor - 7.days, detected_at: anchor
+      )
+
+      get ops_explore_path(**range_params, where: { subject: mine.public_id })
+
+      expect(response.body).to include("Cases for this subject")
+      expect(response.body).to include(ops_case_path(case_record))
+    end
+
+    it "says so plainly when the subject has no Case, rather than offering to make one" do
+      get ops_explore_path(**range_params, where: { subject: mine.public_id })
+
+      expect(response.body).to include("No Case has been raised for this subject")
+      expect(response.body).to include("never from here")
+    end
+
+    # INV-31 on the Case listing too, not just the telemetry.
+    it "never lists a Case from another organization" do
+      theirs = Subject.create!(organization: other_organization, timezone: "UTC")
+      Cases::CaseRecord.create!(
+        organization: other_organization, subject: theirs, domain_key: "hypertension",
+        case_type: "blood_pressure_change", title: "Not yours", status: "new",
+        review_priority: "today", started_at: anchor - 7.days, detected_at: anchor
+      )
+
+      get ops_explore_path(**range_params, where: { subject: theirs.public_id })
+
+      expect(response.body).not_to include("Not yours")
+    end
+  end
+
   # S2C-003: Monitors create Signals, and nothing else creates Cases. A
   # surface where an operator notices something must not become a second way
   # to open work, or the correlation guarantees stop meaning anything.

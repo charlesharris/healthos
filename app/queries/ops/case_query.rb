@@ -59,7 +59,7 @@ module Ops
     UNASSIGNED = "unassigned"
 
     def initialize(organization:, membership: nil, status: nil, priority: nil,
-                   owner: nil, team: nil, domain_key: nil, case_type: nil,
+                   owner: nil, team: nil, domain_key: nil, case_type: nil, subject: nil,
                    sort: nil, page: nil, per_page: nil, limit: nil)
       super(organization: organization, membership: membership)
       @status = Array(status).map(&:to_s).select(&:present?)
@@ -68,6 +68,10 @@ module Ops
       @team = team
       @domain_key = domain_key.presence
       @case_type = case_type.presence
+      # "Everything raised about this person." Not a queue filter — the queue
+      # is deliberately organised by work rather than by subject (HO §84) —
+      # but the question Explore has to answer once it has drilled to one.
+      @subject = subject
       @sort = SORTS.key?(sort.to_s) ? sort.to_s : DEFAULT_SORT
       @per_page = clamp_per_page(limit || per_page)
       @page = [ page.to_i, 1 ].max
@@ -125,6 +129,7 @@ module Ops
       relation = apply_team(relation)
       relation = relation.where(domain_key: @domain_key) if @domain_key
       relation = relation.where(case_type: @case_type) if @case_type
+      relation = relation.where(subject_id: identifier(@subject)) if @subject
       relation
     end
 
