@@ -1,0 +1,13 @@
+<h1><%= Current.organization.name %> — members</h1>
+<table>
+  <thead><tr><th>Email</th><th>Role</th><th>Status</th></tr></thead>
+  <tbody>
+    <% @memberships.each do |membership| %>
+      <tr>
+        <td><%= membership.user.email_address %></td>
+        <td><%= membership.role.humanize %></td>
+        <td><%= membership.status %></td>
+      </tr>
+    <% end %>
+  </tbody>
+</table>

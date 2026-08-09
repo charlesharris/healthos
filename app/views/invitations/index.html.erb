@@ -1,0 +1,23 @@
+<h1>Invitations — <%= Current.organization.name %></h1>
+<% if flash[:notice] %><p><%= flash[:notice] %></p><% end %>
+<% if flash[:alert] %><p><%= flash[:alert] %></p><% end %>
+
+<%= form_with url: invitations_path, method: :post do |f| %>
+  <%= f.email_field :email_address, required: true, placeholder: "colleague@example.com" %>
+  <%= f.select :role, OrganizationMembership::ROLES.map { |r| [r.humanize, r] } %>
+  <%= f.submit "Invite" %>
+<% end %>
+
+<table>
+  <thead><tr><th>Email</th><th>Role</th><th>Expires</th><th>Accepted</th></tr></thead>
+  <tbody>
+    <% @invitations.each do |invitation| %>
+      <tr>
+        <td><%= invitation.email_address %></td>
+        <td><%= invitation.role.humanize %></td>
+        <td><%= invitation.expires_at %></td>
+        <td><%= invitation.accepted_at || "—" %></td>
+      </tr>
+    <% end %>
+  </tbody>
+</table>

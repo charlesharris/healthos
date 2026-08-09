@@ -1,0 +1,10 @@
+<h1>Choose an organization</h1>
+<ul>
+  <% @memberships.each do |membership| %>
+    <li>
+      <%= button_to membership.organization.name,
+            choose_organization_path(organization_id: membership.organization_id) %>
+      <span><%= membership.role.humanize %></span>
+    </li>
+  <% end %>
+</ul>

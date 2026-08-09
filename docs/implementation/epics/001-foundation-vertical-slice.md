@@ -54,14 +54,14 @@ semantics in Epic 002); provenance invariants 1–3.
       (ADR-002 D5), with enforcement proven by spec
 
 ### 001-02 Identity & tenancy
-- [ ] `organizations`, `users`, `organization_memberships` (role on
+- [x] `organizations`, `users`, `organization_memberships` (role on
       membership, NOT on user), `teams`, `team_memberships`
-- [ ] Session auth + invitation-based membership (minimal UI)
-- [ ] `Current` context (organization + membership); policy-object
+- [x] Session auth + invitation-based membership (minimal UI)
+- [x] `Current` context (organization + membership); policy-object
       authorization skeleton
-- [ ] Every tenant-facing table from here on: NOT NULL
+- [x] Every tenant-facing table from here on: NOT NULL
       `organization_id`, FK, tenant-prefixed indexes
-- [ ] Specs: cross-org access denied at controller and query level
+- [x] Specs: cross-org access denied at controller and query level
 - **Contract:** INV-31; S2C-022
 
 ### 001-03 Transactional outbox skeleton
@@ -250,3 +250,82 @@ Not yet verified: **CI green**. The workflow cannot run until the branch
 is pushed. Every job was reproduced locally (rubocop clean, brakeman 0
 warnings, bundler-audit clean, 14 examples 0 failures, image builds,
 `structure.sql` stable across re-migrate).
+
+### 2026-08-09 — CI feedback on 001-01
+
+First push: 4 of 5 jobs green. The PGDG `postgresql-client-18` install
+and role creation in the service container both worked first time. The
+`test` job failed at the schema step, and the cause was not drift.
+
+`DatabaseTasks#initialize_database` decides whether a database is
+initialized by `schema_migration.table_exists?`. With no migrations in
+the app, `schema_migrations` never existed, so Rails concluded "not
+initialized" on every run, re-loaded `structure.sql`, and collided with
+the `ar_internal_metadata` the previous load had created. Reproduced
+locally against clean databases — not CI-specific; the earlier local
+runs simply never started from empty.
+
+**Zero migrations plus `schema_format = :sql` is not a supported
+state.** Two attempted workarounds were withdrawn: creating the
+internal tables from the privileges task (it desynchronises
+`schema_sha1`, and caused the collision), and an empty `structure.sql`
+(then `check_all_pending!` fails trying to create `schema_migrations`
+as `healthos_app`, which correctly lacks `CREATE`). The fix is the
+first real migration, delivered by 001-02.
+
+**Found in passing: `db/queue_structure.sql` contained one table
+instead of Solid Queue's thirteen.** Solid Queue ships
+`db/queue_schema.rb` in Ruby format, which `schema_format = :sql`
+ignores in favour of a `.sql` file that was being generated
+defectively — so the queue database had none of its job tables. This
+had nothing to do with CI and would have surfaced in epic 001-03 as
+jobs silently failing when the outbox dispatcher first ran.
+Regenerated from `queue_schema.rb`. **Regenerate it again whenever
+Solid Queue is upgraded** — nothing automatic keeps the two in sync.
+
+### 2026-08-09 — 001-02 identity & tenancy
+
+**Rails 8.1's `authentication` generator was used as the base** for
+sessions, giving `Session`, `Current`, and the sign-in flow. `User` was
+then rewritten: no `role` column (HO §10.2 forbids a global role on
+User) and no `organization_id`, since §10.2 anticipates a user
+belonging to several organizations.
+
+**`Current` holds membership, and `organization` derives from it**
+rather than being stored alongside, so the two cannot disagree. The
+membership is re-resolved from the database on every request rather
+than trusted from the cookie, so suspending a membership takes effect
+on the next request instead of whenever the session expires. Covered by
+a spec.
+
+**Deviation: `invitations` is not in the HO §167 schema inventory.**
+Added because HO §11 requires invitation-based membership and the
+inventory names no table for it. Only a SHA-256 digest of the token is
+stored, following the HO §108 reasoning for integration credentials, so
+a database disclosure does not permit accepting outstanding
+invitations. Classified `mutable` in `db/privileges.yml`
+(`accepted_at` is set on acceptance); the access audit trail belongs to
+`audit_events`, not to this table.
+
+**`Tenanted::Query` takes organization as a required constructor
+argument and never reads `Current`.** Reading ambient tenancy inside a
+query object is invisible in the signature and reintroduces exactly
+what HO §12 exists to prevent. It also refuses a membership from a
+different organization rather than silently narrowing, since that
+combination is always a caller bug. This is simultaneously the ADR-001
+query-object seam.
+
+**The privilege completeness guard earned itself.** `sessions` and
+`invitations` were left unclassified on purpose to check it; the suite
+failed with "Unclassified tables: sessions, invitations" before they
+were added to the manifest.
+
+**A cross-tenant hole was found by spec, not by review.**
+`ApplicationPolicy#guard_same_tenant!` duck-typed on `organization_id`,
+which `Organization` does not have — its own `id` is the tenant key —
+so the guard silently skipped the single most important record type.
+Now handled explicitly in `tenant_id_for`.
+
+Cross-tenant references render 404 rather than 403, so a response never
+confirms that a record exists in another organization (HO §123 lists ID
+enumeration as a required security test).

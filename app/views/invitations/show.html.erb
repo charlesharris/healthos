@@ -1,0 +1,8 @@
+<h1>Join <%= @invitation.organization.name %></h1>
+<p>Invited as <%= @invitation.role.humanize %> (<%= @invitation.email_address %>)</p>
+
+<%= form_with url: accept_invitation_path, method: :post do |f| %>
+  <%= f.hidden_field :token, value: @token %>
+  <%= f.password_field :password, required: true, placeholder: "Choose a password" %>
+  <%= f.submit "Accept invitation" %>
+<% end %>

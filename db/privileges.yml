@@ -65,6 +65,11 @@ mutable:
   - organization_memberships
   - teams
   - team_memberships
+  # Session records are created and destroyed on sign in/out.
+  - sessions
+  # accepted_at is set on acceptance. Not evidence, so not append-only —
+  # the audit trail for access lives in audit_events (HO §92).
+  - invitations
   - subjects
   - subject_identities
   - subject_identifiers
