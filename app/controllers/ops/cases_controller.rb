@@ -66,9 +66,23 @@ module Ops
         filters: scope_filters,
         baseline_mode: params[:baseline]
       )
+
+      # 002x-02. Where this subject sits among the program's baselines — the
+      # subject-level question SC §66 asks for, answered from materialized
+      # artifacts rather than 47 baseline builds inside a page render.
+      @cohort_baselines = cohort_baseline_query
     end
 
     private
+
+    def cohort_baseline_query
+      return nil unless @telemetry&.cohort_baseline? && @telemetry.semantic_key
+
+      CohortBaselineQuery.new(
+        organization: Current.organization, membership: Current.membership,
+        semantic_key: @telemetry.semantic_key, exclude_subject: @case_record.subject
+      )
+    end
 
     def resolve_tab
       requested = params[:status].presence || ACTIVE_TAB

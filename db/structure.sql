@@ -72,6 +72,11 @@ CREATE TABLE public.baseline_instances (
     fingerprint text NOT NULL,
     created_at timestamp(6) without time zone NOT NULL,
     updated_at timestamp(6) without time zone NOT NULL,
+    semantic_key text NOT NULL,
+    semantic_version integer NOT NULL,
+    central_value numeric,
+    dispersion numeric,
+    unit text,
     CONSTRAINT baseline_instances_maturity_check CHECK ((maturity = ANY (ARRAY['immature'::text, 'partial'::text, 'mature'::text])))
 );
 
@@ -1180,6 +1185,13 @@ CREATE INDEX index_baseline_instances_on_case_id ON public.baseline_instances US
 --
 
 CREATE INDEX index_baseline_instances_on_evidence_set_id ON public.baseline_instances USING btree (evidence_set_id);
+
+
+--
+-- Name: index_baseline_instances_on_org_measure_as_of; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_baseline_instances_on_org_measure_as_of ON public.baseline_instances USING btree (organization_id, semantic_key, as_of);
 
 
 --
@@ -2959,6 +2971,7 @@ ALTER TABLE ONLY public.intervals
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20260810090000'),
 ('20260809190000'),
 ('20260809180000'),
 ('20260809160000'),

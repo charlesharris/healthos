@@ -10,7 +10,7 @@
     handle — never a name, never an MRN (HO §84, §92).
 
     Locals: case_record, trigger_attachments, other_attachments, timeline,
-    timeline_truncated, telemetry, drawer. %>
+    timeline_truncated, telemetry, cohort_baselines, drawer. %>
 <%# Two paths, because they want different things carried.
 
     `chart_path` is the bare Case with the chosen measure: the chart's own
@@ -74,7 +74,8 @@
           </section>
 
           <%= render "ops/cases/dimensions", profile: telemetry,
-                     base_path: review_path, frame_id: drawer ? "case_drawer" : nil %>
+                     base_path: review_path, frame_id: drawer ? "case_drawer" : nil,
+                     cohort_baselines: cohort_baselines %>
         <% end %>
 
         <section class="section">

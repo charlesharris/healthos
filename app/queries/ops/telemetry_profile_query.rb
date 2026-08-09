@@ -216,6 +216,9 @@ module Ops
     def cohort_baseline? = baseline_mode == "cohort"
     def baseline_mode_explicit? = @baseline_mode_explicit
 
+    # SC §66's analysis unit, named rather than assumed.
+    def analysis_unit = cohort_baseline? ? :subject : :reading
+
     # SC §64: "When personal baseline is immature, a domain may use a cohort
     # prior. UI must say so."
     #
@@ -520,6 +523,17 @@ module Ops
       ]
     end
 
+    # The selection's own central value, on the same footing as a subject's
+    # baseline centre so the two can be set side by side (002x-02). Median for
+    # the same reason PersonalRecent uses one: a single mistyped reading
+    # should not move it.
+    def selection_median
+      values = selection_readings_scope.where.not(value_numeric: nil).pluck(:value_numeric).map(&:to_f)
+      return nil if values.empty?
+
+      median(values)
+    end
+
     # Biological summary, last and explicitly caveated (STAT-035). Median
     # rather than mean because one mistyped reading should not move it.
     def value_summary
@@ -590,10 +604,44 @@ module Ops
 
     # Counts on both sides of the selection, keyed the same way, merged into
     # the tuple shape build_profile expects.
+    #
+    # SC §66: "Default cohort analysis unit: subject, not individual
+    # observations… This prevents patients with dense telemetry from
+    # dominating the sample." So against a cohort prior the unit is the
+    # subject, and a subject measuring four times a day stops outvoting one
+    # measuring daily. Within one subject's own record the unit is the
+    # reading, because there is only one subject and counting them would say
+    # nothing.
     def split_counts(grouping)
-      selected = selection_readings_scope.group(grouping).count
-      baseline = baseline_readings_scope.group(grouping).count
+      return subject_level_counts(grouping) if cohort_baseline?
 
+      merge_counts(selection_readings_scope.group(grouping).count,
+                   baseline_readings_scope.group(grouping).count)
+    end
+
+    # One subject, one vote — cast for the value they used most in that
+    # window.
+    #
+    # Dominant rather than "used at all" because it partitions: every subject
+    # lands in exactly one bucket, so the shares sum to a whole and can be
+    # read as a composition. "Used manual entry at least once" is a real
+    # question too, and a different one — it would need its own card rather
+    # than quietly changing what these bars mean.
+    def subject_level_counts(grouping)
+      merge_counts(dominant_by_subject(selection_readings_scope, grouping),
+                   dominant_by_subject(baseline_readings_scope, grouping))
+    end
+
+    def dominant_by_subject(scope, grouping)
+      scope.group(:subject_id, grouping).count
+        .group_by { |(subject_id, _value), _count| subject_id }
+        .each_with_object(Hash.new(0)) do |(_subject_id, rows), tally|
+          winner = rows.max_by { |(_key, value), count| [ count, value.to_s ] }
+          tally[winner.first.last] += 1
+        end
+    end
+
+    def merge_counts(selected, baseline)
       (selected.keys | baseline.keys).map do |value|
         [ value, baseline.fetch(value, 0), selected.fetch(value, 0) ]
       end
@@ -656,12 +704,15 @@ module Ops
 
     # Same split as #split_counts, over a joined column.
     def split_counts_on(association, grouping)
-      selected = selection_readings_scope.joins(association).group(grouping).count
-      baseline = baseline_readings_scope.joins(association).group(grouping).count
-
-      (selected.keys | baseline.keys).map do |value|
-        [ value, baseline.fetch(value, 0), selected.fetch(value, 0) ]
+      if cohort_baseline?
+        return merge_counts(
+          dominant_by_subject(selection_readings_scope.joins(association), grouping),
+          dominant_by_subject(baseline_readings_scope.joins(association), grouping)
+        )
       end
+
+      merge_counts(selection_readings_scope.joins(association).group(grouping).count,
+                   baseline_readings_scope.joins(association).group(grouping).count)
     end
 
     # Explore only. "Which subjects are in this region" is the question a
@@ -711,9 +762,13 @@ module Ops
 
       Profile.new(key: key, label: label, kind: kind, note: note, rows: rows,
                   baseline_total: baseline_total, selection_total: selection_total,
-                  unit_label: "readings",
+                  unit_label: analysis_unit_label,
                   truncated_from: folded.any? ? ordered.length : nil)
     end
+
+    # Named on every card, because "1% manual entry" and "1 subject in 47 uses
+    # manual entry" are different claims and only one of them is actionable.
+    def analysis_unit_label = cohort_baseline? ? "subjects" : "readings"
 
     def share(count, total) = total.zero? ? nil : (count.to_f / total)
 

@@ -183,6 +183,22 @@ namespace :demo do
     seed_lifecycle_states(org: org, operator: operator, source: source, store: store, as_of: as_of)
 
     puts "\n== Seeded =="
+    # SC §66's precondition: subject-level features are computed FIRST. The
+    # cohort surfaces read materialized baselines rather than building 47 of
+    # them inside a page render, so a demo without them shows an empty cohort
+    # and looks like a bug.
+    puts "\n== Baselines =="
+    Analysis::ContextDefinition.declared_key_order.each do |semantic_key|
+      outcome = Baselines::MaterializeCohort.call(
+        organization: org, semantic_key: semantic_key, as_of: as_of
+      )
+      next if outcome.total.zero?
+
+      puts "  #{semantic_key.split('.').last.ljust(12)} #{outcome.created} created, " \
+           "#{outcome.existing} already present#{outcome.skipped.positive? ? ", #{outcome.skipped} skipped" : ''}"
+    end
+
+    puts "\n== Population =="
     puts "  subjects:     #{Subject.where(organization: org).count}"
     puts "  observations: #{Observation.where(organization: org).count}"
     puts "  signals:      #{Monitoring::Signal.where(organization: org).count}"

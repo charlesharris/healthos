@@ -133,7 +133,8 @@
     </div>
   <% else %>
     <%= render "ops/cases/dimensions", profile: @telemetry,
-               base_path: selected_base, frame_id: nil %>
+               base_path: selected_base, frame_id: nil,
+               cohort_baselines: @cohort_baselines %>
   <% end %>
 
   <%# The way out. Independent of whether a region is selected — having scoped

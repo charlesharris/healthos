@@ -64,6 +64,10 @@ STAT-001, 004–009, 012–030, 036–042; S2C-018/019.
 - [x] 003-07 `baseline_instances` with maturity, completeness,
       source_summary, evidence set (§57)
 - [x] 003-08 `personal_recent` baseline v1 with generic minimums
+      — materialization (`Baselines::Materialize`, `MaterializeCohort`, job)
+      added 2026-08-10 for 002x-02; `baseline_instances` gained semantic_key,
+      semantic_version, central_value, dispersion and unit, without which the
+      table could not say what it was a baseline of
       (10 usable days / 14-day span; targets 21/28) (STAT-016/017)
 - [x] 003-09 Version tuple + fingerprint capture on all artifacts (§80)
 - [ ] 003-10 Late-data invalidation: overlap detection →

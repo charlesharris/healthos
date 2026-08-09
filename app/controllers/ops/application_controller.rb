@@ -68,6 +68,13 @@ module Ops
       detail = case_query_for(@case_record.id)
       case_record = detail.resolve
 
+      telemetry = detail.telemetry_profile(
+        semantic_key: params[:key].presence,
+        selection: TelemetryProfileQuery::Selection.from_params(params),
+        filters: scope_filters,
+        baseline_mode: params[:baseline]
+      )
+
       turbo_stream.replace(
         "case_drawer",
         partial: "ops/cases/drawer_frame",
@@ -76,11 +83,17 @@ module Ops
                   other_attachments: detail.other_attachments,
                   timeline: detail.timeline,
                   timeline_truncated: detail.timeline_truncated?,
-                  telemetry: detail.telemetry_profile(
-                    semantic_key: params[:key].presence,
-                    selection: TelemetryProfileQuery::Selection.from_params(params),
-                    filters: scope_filters,
-                    baseline_mode: params[:baseline]
+                  telemetry: telemetry,
+                  # Recomputed rather than dropped: acting on a Case from the
+                  # panel must not silently remove the cohort context the
+                  # operator was reading it against.
+                  cohort_baselines: (
+                    if telemetry&.cohort_baseline? && telemetry.semantic_key
+                      CohortBaselineQuery.new(
+                        organization: Current.organization, membership: Current.membership,
+                        semantic_key: telemetry.semantic_key, exclude_subject: case_record.subject
+                      )
+                    end
                   ) }
       )
     end

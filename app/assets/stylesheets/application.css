@@ -1708,6 +1708,11 @@ turbo-frame[busy] .chart, turbo-frame[busy] .dims, turbo-frame[busy] .scope { op
 .dim-bar-baseline span { background: var(--viz-baseline); }
 .dim-bar-selection span { background: var(--viz-selection); }
 
+/* The cohort baseline distribution sits above the per-dimension grid: it is
+   the frame those cards are read inside, not one of them. */
+.dim-wide { margin-bottom: 0.6rem; }
+.dim-wide .dim-stats { grid-template-columns: 1fr auto auto; column-gap: 1.2rem; }
+
 .dim-unchanged {
   display: flex;
   align-items: baseline;

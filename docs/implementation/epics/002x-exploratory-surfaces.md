@@ -27,6 +27,13 @@ Anything in the right column is Epic 003/004 work. If a task here starts to
 need it, the task is misfiled — say so rather than building a second,
 ungoverned copy of the statistical core inside a view.
 
+**That happened once, and this is the record of it.** 002x-02 needed
+per-subject baselines, which are Epic 003 artifacts. Rather than approximate
+one inside a view, the materializer was built as 003 work
+(`Baselines::Materialize`, logged against 003-08) and these surfaces only
+READ what it wrote. The rule holds: nothing in `app/queries/ops` or
+`app/views/ops` creates an artifact.
+
 ---
 
 ## Landed
@@ -48,26 +55,27 @@ ungoverned copy of the statistical core inside a view.
 
 ---
 
-## Open defect (found 2026-08-09, blocks 002x-01)
+## Closed defect
 
-### D1 — the cohort prior uses the wrong analysis unit (SC §66)
+### D1 — the cohort prior used the wrong analysis unit (SC §66) — CLOSED
 
 **SC §66:** *"Default cohort analysis unit: `subject`, not individual
 observations. Subject-level features are computed first… This prevents
 patients with dense telemetry from dominating the sample."*
 
-`TelemetryProfileQuery#cohort_prior_scope` pools **raw readings** across
-subjects. A subject measuring four times a day currently contributes eight
-times the weight of one measuring daily, and "1% of readings are manual
-entry" is not the same claim as "1 subject in 47 uses manual entry" — the
-second is the one a provider can act on.
+`TelemetryProfileQuery#cohort_prior_scope` pooled **raw readings** across
+subjects. A subject measuring four times a day contributed eight times the
+weight of one measuring daily, and "1% of readings are manual entry" is not
+the same claim as "1 subject in 47 uses manual entry" — the second is the one
+a provider can act on.
 
-This is a correctness defect in shipped code, not a missing feature. It also
-means the current cohort prior is not yet the thing review asked for:
-"comparing against other patients' baselines".
+A correctness defect in shipped code, not a missing feature. It also meant
+the cohort prior was not yet the thing review asked for: "comparing against
+other patients' baselines".
 
 **Not silently fixable.** Changing the unit changes what every cohort bar
-means, so it needs the UI to say which unit is in use — which is 002x-01.
+means, so it needed the UI to say which unit is in use — done in 002x-01,
+which puts a `per subject` / `per reading` chip on the baseline bar.
 
 ---
 
@@ -75,18 +83,18 @@ means, so it needs the UI to say which unit is in use — which is 002x-01.
 
 ### Cohort comparison that means something (the review's point)
 
-- [ ] **002x-01 Subject-level cohort features (SC §66).** Compute a
+- [x] **002x-01 Subject-level cohort features (SC §66).** Compute a
       per-subject summary over the range first, then compare distributions.
       The dimension strip in cohort mode reports **share of subjects**, and
       says so; reading-level shares remain available but are labelled as a
       different question. Fixes D1.
-- [ ] **002x-02 Compare against other subjects' baselines, not their raw
+- [x] **002x-02 Compare against other subjects' baselines, not their raw
       readings.** The subject-level feature that matters is each subject's
       own baseline level over the window. "Where does this subject's
       selection sit in the distribution of program baselines" is the question
       review actually asked for, and it is a different question from "where
       does this reading sit among all readings".
-      _Depends on per-subject baselines being computable in bulk — see Risks._
+      _Resolved by materializing BaselineInstance rows — see the decision log._
 - [ ] **002x-03 SC §25 cohort minimums.** Provider-facing Difference ranking
       needs ≥20 affected and ≥20 baseline subjects. We do not rank, so
       "descriptive aggregate display" applies — but the surface must state
@@ -133,11 +141,9 @@ means, so it needs the UI to say which unit is in use — which is 002x-01.
 
 ## Risks
 
-**002x-02 may not be affordable live.** Computing `Baselines::PersonalRecent`
-for 47 subjects on each request is 47 baseline builds per page. If it is not
-fast enough, the honest answers are materialized `BaselineInstance` rows
-(Epic 003-09+) or a stated staleness — not a cheaper approximation that keeps
-the label "baseline".
+**~~002x-02 may not be affordable live.~~** Settled: materialized
+`BaselineInstance` rows. The surface reads artifacts and states their `as_of`;
+nothing computes a baseline during a page render.
 
 **Changing the cohort unit changes published numbers.** Anyone who has read a
 cohort percentage from this surface has read a reading-level share. The
@@ -147,7 +153,7 @@ change must be visible in the UI, not just correct in the query.
 
 ## Gate
 
-- [ ] Cohort comparison states its analysis unit, and that unit is `subject`
+- [x] Cohort comparison states its analysis unit, and that unit is `subject`
       (SC §66)
 - [ ] No surface in this epic emits evidence strength, a rank, or a persisted
       artifact
@@ -155,6 +161,52 @@ change must be visible in the UI, not just correct in the query.
 - [ ] The exploration loop is completable from the keyboard
 
 ## Decision Log
+
+### 2026-08-10 — 002x-01/02: the cohort unit is now the subject
+
+`baseline_instances` existed since 003-07 and **nothing had ever written a
+row**. `PersonalRecent` could build a baseline; nothing persisted one. That
+was tolerable while baselines were only ever needed for the subject on
+screen, and stopped being tolerable the moment a cohort question was asked —
+"where does this subject sit among the program's baselines" is 47 baseline
+builds per page load, which is not a read.
+
+So: `Baselines::Materialize` (idempotent on HO §26 identity, immutable,
+records its inputs as an EvidenceSet per INV-3), `MaterializeCohort` for a
+whole organization, and a job. Demo seed materializes them, so a fresh demo
+does not show an empty cohort and look like a bug.
+
+**The table could not say what it was a baseline OF.** No semantic key — so
+"this subject's systolic baseline" was not a query it could answer — and no
+centre or scale, so SC §29's robust standardized effect had nothing to
+compute from. `Result` has carried all four since 003-08; the table never
+learned them. Added by migration; the table was empty in every environment,
+so the NOT NULLs went in outright.
+
+**D1 closed.** The cohort comparison now counts subjects. A subject is
+assigned their *dominant* value in each window, because that partitions —
+every subject lands in one bucket and the shares sum to a whole. "Used manual
+entry at least once" is a real question too, and a different one; it would
+need its own card rather than quietly changing what these bars mean.
+
+The analysis unit is named on the baseline bar (`per subject` / `per
+reading`), because "1% of readings are manual entry" and "1 subject in 47 uses
+manual entry" are different claims and the bars look identical.
+
+**002x-02** reports the distribution of other subjects' baseline centres —
+median, IQR, range — with the subject's own selection placed in it as a
+percentile and an inside/outside-the-middle-half flag. A percentile rather
+than a z-score, because a z-score implies a shape nobody has checked; SC §29
+uses a robust scale for the same reason. The card states subject coverage
+(how many have a baseline out of how many have readings), the maturity mix,
+the `as_of`, and SC §25's 20-subject ranking floor when the cohort is below
+it.
+
+Verification note: this session's browser checks were unreliable for a while
+because **two application instances were bound to :3000** — a Docker container
+and a native puma — and only one had the migration. Both answered `/up` with
+200, so requests round-robined between them. The rspec suite was the honest
+gate throughout. Duplicate listeners now stopped.
 
 ### 2026-08-09 — opened
 

@@ -71,6 +71,14 @@ module Ops
       # (S2C-003), so the way out of here is into work, never into creating it.
       @subject_cases = cases_for_focused_subject
 
+      @cohort_baselines =
+        if @telemetry.cohort_baseline? && @telemetry.semantic_key
+          CohortBaselineQuery.new(
+            organization: Current.organization, membership: Current.membership,
+            semantic_key: @telemetry.semantic_key, exclude_subject: focused_subject
+          )
+        end
+
       @split = SPLITS.key?(params[:split].to_s) ? params[:split].to_s : "none"
       @panels = build_panels
       # One colour scale across every panel. Scaling each to its own maximum
