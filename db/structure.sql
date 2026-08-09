@@ -162,6 +162,57 @@ CREATE TABLE public.staff_members (
 
 
 --
+-- Name: subject_identifiers; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.subject_identifiers (
+    id uuid DEFAULT uuidv7() NOT NULL,
+    organization_id uuid NOT NULL,
+    subject_id uuid NOT NULL,
+    system text NOT NULL,
+    value text NOT NULL,
+    source_id uuid,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL
+);
+
+
+--
+-- Name: subject_identities; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.subject_identities (
+    id uuid DEFAULT uuidv7() NOT NULL,
+    organization_id uuid NOT NULL,
+    subject_id uuid NOT NULL,
+    display_name text,
+    first_name text,
+    last_name text,
+    date_of_birth text,
+    contact_email text,
+    contact_phone text,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL
+);
+
+
+--
+-- Name: subjects; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.subjects (
+    id uuid DEFAULT uuidv7() NOT NULL,
+    organization_id uuid NOT NULL,
+    public_id text NOT NULL,
+    status text DEFAULT 'active'::text NOT NULL,
+    timezone text DEFAULT 'UTC'::text NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT subjects_status_check CHECK ((status = ANY (ARRAY['active'::text, 'inactive'::text, 'archived'::text])))
+);
+
+
+--
 -- Name: team_memberships; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -276,6 +327,30 @@ ALTER TABLE ONLY public.sessions
 
 ALTER TABLE ONLY public.staff_members
     ADD CONSTRAINT staff_members_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: subject_identifiers subject_identifiers_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.subject_identifiers
+    ADD CONSTRAINT subject_identifiers_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: subject_identities subject_identities_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.subject_identities
+    ADD CONSTRAINT subject_identities_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: subjects subjects_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.subjects
+    ADD CONSTRAINT subjects_pkey PRIMARY KEY (id);
 
 
 --
@@ -464,6 +539,69 @@ CREATE UNIQUE INDEX index_staff_members_on_user_id ON public.staff_members USING
 
 
 --
+-- Name: index_subject_identifiers_on_org_and_subject; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_subject_identifiers_on_org_and_subject ON public.subject_identifiers USING btree (organization_id, subject_id);
+
+
+--
+-- Name: index_subject_identifiers_on_organization_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_subject_identifiers_on_organization_id ON public.subject_identifiers USING btree (organization_id);
+
+
+--
+-- Name: index_subject_identifiers_on_subject_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_subject_identifiers_on_subject_id ON public.subject_identifiers USING btree (subject_id);
+
+
+--
+-- Name: index_subject_identifiers_unique_per_org; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_subject_identifiers_unique_per_org ON public.subject_identifiers USING btree (organization_id, system, value);
+
+
+--
+-- Name: index_subject_identities_on_organization_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_subject_identities_on_organization_id ON public.subject_identities USING btree (organization_id);
+
+
+--
+-- Name: index_subject_identities_on_subject_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_subject_identities_on_subject_id ON public.subject_identities USING btree (subject_id);
+
+
+--
+-- Name: index_subjects_on_organization_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_subjects_on_organization_id ON public.subjects USING btree (organization_id);
+
+
+--
+-- Name: index_subjects_on_organization_id_and_public_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_subjects_on_organization_id_and_public_id ON public.subjects USING btree (organization_id, public_id);
+
+
+--
+-- Name: index_subjects_on_organization_id_and_status; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_subjects_on_organization_id_and_status ON public.subjects USING btree (organization_id, status);
+
+
+--
 -- Name: index_team_memberships_on_org_and_team; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -517,6 +655,14 @@ CREATE UNIQUE INDEX index_teams_on_organization_id_and_name ON public.teams USIN
 --
 
 CREATE UNIQUE INDEX index_users_on_email_address ON public.users USING btree (email_address);
+
+
+--
+-- Name: subject_identifiers fk_rails_038ebe50fb; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.subject_identifiers
+    ADD CONSTRAINT fk_rails_038ebe50fb FOREIGN KEY (organization_id) REFERENCES public.organizations(id);
 
 
 --
@@ -592,6 +738,14 @@ ALTER TABLE ONLY public.sessions
 
 
 --
+-- Name: subject_identifiers fk_rails_7d53575fbf; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.subject_identifiers
+    ADD CONSTRAINT fk_rails_7d53575fbf FOREIGN KEY (subject_id) REFERENCES public.subjects(id);
+
+
+--
 -- Name: staff_members fk_rails_81a4d9ebe4; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -605,6 +759,22 @@ ALTER TABLE ONLY public.staff_members
 
 ALTER TABLE ONLY public.domain_events
     ADD CONSTRAINT fk_rails_8afe43432b FOREIGN KEY (organization_id) REFERENCES public.organizations(id);
+
+
+--
+-- Name: subjects fk_rails_9bd688ebfe; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.subjects
+    ADD CONSTRAINT fk_rails_9bd688ebfe FOREIGN KEY (organization_id) REFERENCES public.organizations(id);
+
+
+--
+-- Name: subject_identities fk_rails_b620b4b32c; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.subject_identities
+    ADD CONSTRAINT fk_rails_b620b4b32c FOREIGN KEY (organization_id) REFERENCES public.organizations(id);
 
 
 --
@@ -632,6 +802,14 @@ ALTER TABLE ONLY public.audit_events
 
 
 --
+-- Name: subject_identities fk_rails_e961cc75df; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.subject_identities
+    ADD CONSTRAINT fk_rails_e961cc75df FOREIGN KEY (subject_id) REFERENCES public.subjects(id);
+
+
+--
 -- Name: teams fk_rails_f07f0bd66d; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -654,6 +832,9 @@ ALTER TABLE ONLY public.team_memberships
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20260809090200'),
+('20260809090100'),
+('20260809090000'),
 ('20260809080100'),
 ('20260809080000'),
 ('20260809071500'),

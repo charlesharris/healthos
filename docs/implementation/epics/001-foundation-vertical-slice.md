@@ -73,10 +73,10 @@ semantics in Epic 002); provenance invariants 1–3.
       idempotent (S2C-020, S2C-021)
 
 ### 001-04 Subject model
-- [ ] `subjects` (public_id, org, status, timezone) /
+- [x] `subjects` (public_id, org, status, timezone) /
       `subject_identities` (PHI fields, application-level encryption) /
       `subject_identifiers` (system+value unique per org)
-- [ ] Spec: identity fields encrypted at rest; identifiers resolve a
+- [x] Spec: identity fields encrypted at rest; identifiers resolve a
       subject idempotently
 
 ### 001-05 Sources + RawEnvelope + object storage
@@ -513,3 +513,45 @@ types.
 
 Side effect: `audit_events` is the first append-only table, so the two
 privilege specs that had been skipping since 001-01 now run for real.
+
+### 2026-08-09 — 001-04 subject model
+
+**Encryption keys come from the environment, not Rails credentials.** The
+default (credentials + `config/master.key`) would require
+`RAILS_MASTER_KEY` as a CI repository secret. Environment keys keep CI
+green without one and make rotation an infrastructure concern rather
+than a commit. Development and test defaults are fixed and public, which
+is safe *only* because prototype-scope.md records synthetic data
+exclusively; production raises on boot if the keys are absent.
+
+**Identity is split from `subjects`** so that telemetry, monitoring and
+analysis never join against a table containing PHI. Reading identity
+becomes a deliberate act, which is also what makes HO §92's "Subject
+identity viewed" a meaningful audit event.
+
+**Deterministic encryption only where lookup is required** —
+`contact_email` and `contact_phone`. It is weaker (equal plaintexts give
+equal ciphertexts, so frequency analysis is possible), so names and date
+of birth are non-deterministic and consequently unsearchable. A spec
+asserts identical plaintext yields different ciphertext, so the
+distinction cannot be quietly erased later.
+
+**`public_id` is random, not derived.** Internal ids are UUIDv7 and
+encode creation time; a public handle that did the same would leak
+enrolment order and timing in URLs and exports (HO §123).
+
+**Identity resolution is idempotent via the database, not a
+check-then-insert.** Under concurrent ingestion the check-then-insert
+race is exactly what the unique index exists to lose, so
+`Identity::ResolveSubject` rescues `RecordNotUnique` and adopts the
+winner. This matters because ingestion is at-least-once (S2C-020).
+
+**Subject-local day boundaries.** `Subject#local_date` resolves the day
+in the subject's own timezone. Completeness denominators are day-based
+(SC §13–14) and HO §121 lists timezone boundaries as a required
+regression case, so a UTC day boundary would misattribute readings and
+corrupt the denominators. Specced with a 03:00 UTC reading that belongs
+to the previous day in New York.
+
+`subject_identifiers.source_id` exists but its association is commented
+out until `Source` arrives in 001-05.

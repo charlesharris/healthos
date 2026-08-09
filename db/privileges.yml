@@ -59,6 +59,13 @@ append_only:
 
 # The app role has full DML. Each entry is a decision, not an omission.
 mutable:
+  # Subjects. Identity and identifiers are mutable: a name is corrected, an
+  # MRN is reassigned. They are not evidence — HO §50's immutability applies
+  # to analytical artifacts, not to who someone is.
+  - subjects
+  - subject_identities
+  - subject_identifiers
+
   # Identity and tenancy
   - organizations
   - users
