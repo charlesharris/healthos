@@ -23,6 +23,7 @@
 <%# Scope filters ride on every link, or a drill-down would be undone by the
     next click on a measure or a timeline filter. %>
 <% chart_path = chart_path.merge(where: telemetry.filters) if telemetry&.filters.present? %>
+<% chart_path = chart_path.merge(baseline: telemetry.baseline_mode) if telemetry&.cohort_baseline? %>
 <% review_path = telemetry && !telemetry.selection.from_signal? ?
                    chart_path.merge(telemetry.selection.to_params) : chart_path %>
 

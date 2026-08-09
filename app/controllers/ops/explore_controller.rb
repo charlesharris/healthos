@@ -39,7 +39,8 @@ module Ops
                    default_selection,
         semantic_key: params[:key].presence,
         preferred_keys: Analysis::ContextDefinition.declared_key_order,
-        filters: @filters
+        filters: @filters,
+        baseline_mode: params[:baseline]
       )
 
       # HO §92: reading cohort telemetry is provider access to health data,

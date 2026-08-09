@@ -12,6 +12,7 @@
             range_from: @range.from.to_date, range_to: @range.to.to_date,
             key: @telemetry.semantic_key } %>
 <% base = base.merge(where: @telemetry.filters) if @telemetry.filters.present? %>
+<% base = base.merge(baseline: @telemetry.baseline_mode) if @telemetry.cohort_baseline? %>
 <% selected_base = @telemetry.selection.none? ? base : base.merge(@telemetry.selection.to_params) %>
 
 <div class="page-head">

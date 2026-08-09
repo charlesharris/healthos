@@ -65,10 +65,11 @@ RSpec.describe "Quick Review telemetry profile", type: :model do
     )
   end
 
-  def profile(semantic_key: nil, preferred_keys: [], subject: subject_record, selected: selection)
+  def profile(semantic_key: nil, preferred_keys: [], subject: subject_record,
+              selected: selection, baseline: nil)
     Ops::TelemetryProfileQuery.new(
       organization: organization, subject: subject, range: range, selection: selected,
-      semantic_key: semantic_key, preferred_keys: preferred_keys
+      semantic_key: semantic_key, preferred_keys: preferred_keys, baseline_mode: baseline
     )
   end
 
@@ -380,6 +381,155 @@ RSpec.describe "Quick Review telemetry profile", type: :model do
         )
 
         expect(outside.clamp_to(range)).to be_nil
+      end
+    end
+  end
+
+  # SC §20–23, §64. The screen used to compare a selection against "everything
+  # outside it" without ever saying so, without reporting how much was in it,
+  # and without noticing when there was nothing in it at all — it rendered
+  # "0 → 21" with a full-width bar. Two numbers side by side are not a
+  # comparison when one of them rests on no days.
+  describe "the baseline" do
+    def measure_days(count, from: 1, subject: subject_record, value: 120, minute: 0)
+      count.times { |i| observe(days_ago: from + i, subject: subject, value: value, minute: minute) }
+    end
+
+    describe "SC §21 maturity, reported not implied" do
+      it "is immature below the governed minimum" do
+        measure_days(3, from: 15)
+
+        base = profile.baseline_sufficiency
+
+        expect(base.usable_units).to eq(3)
+        expect(base.maturity).to eq("immature")
+        expect(base).not_to be_sufficient
+      end
+
+      # Both bars: 15 days over a 15-day span clears the 10/14 minimum and
+      # falls short of the 21/28 target.
+      it "is partial once the minimum is cleared but the target is not" do
+        measure_days(15, from: 8)
+
+        base = profile.baseline_sufficiency
+
+        expect(base.maturity).to eq("partial")
+        expect(base).to be_sufficient
+      end
+
+      # Both units AND span must clear a level: ten readings crammed into
+      # three days is not a fortnight's baseline.
+      it "stays immature when many readings sit in too few days" do
+        12.times { |i| observe(days_ago: 20, value: 120 + i, minute: i) }
+
+        expect(profile.baseline_sufficiency.maturity).to eq("immature")
+      end
+
+      it "takes its thresholds from governed configuration, not from itself" do
+        expect(Ops::TelemetryProfileQuery.minimum_baseline_units)
+          .to eq(Analysis::StatisticalConfig.instance.baseline("minimum_usable_units"))
+        expect(Ops::TelemetryProfileQuery.minimum_affected_units)
+          .to eq(Analysis::StatisticalConfig.instance.affected_window("minimum_usable_units"))
+      end
+    end
+
+    describe "refusing a comparison that is not one" do
+      # The case in the screenshot: a drag covering nearly the whole range.
+      it "is not comparable when the selection leaves no baseline behind it" do
+        measure_days(20, from: 1)
+
+        everything = Ops::TelemetryProfileQuery::Selection.new(
+          from: range.from, to: range.to, origin: :custom
+        )
+        result = profile(selected: everything)
+
+        expect(result.baseline_sufficiency.usable_units).to eq(0)
+        expect(result).not_to be_comparable
+      end
+
+      # SC §23: the affected window has its own minimum and no maturity.
+      it "is not comparable when the selection itself is too thin" do
+        measure_days(20, from: 5)
+
+        sliver = Ops::TelemetryProfileQuery::Selection.new(
+          from: anchor - 2.days, to: anchor - 1.day, origin: :custom
+        )
+        result = profile(selected: sliver)
+
+        expect(result.selection_sufficiency).not_to be_sufficient
+        expect(result).not_to be_comparable
+      end
+
+      it "is comparable when both sides clear their governed minimums" do
+        measure_days(14, from: 10)
+        measure_days(7, from: 1)
+
+        expect(profile).to be_comparable
+      end
+    end
+
+    # SC §64. Comparing a subject only against themselves runs out of data
+    # exactly when the personal record is short, which is most of the time
+    # early on.
+    describe "SC §64 cohort prior" do
+      let!(:peer_a) { Subject.create!(organization: organization, timezone: "UTC") }
+      let!(:peer_b) { Subject.create!(organization: organization, timezone: "UTC") }
+
+      before do
+        # Enough in the selection to clear SC §23, and nothing outside it — so
+        # the personal baseline is empty while the program's is not. This is
+        # the cold-start shape SC §64 exists for.
+        measure_days(7, from: 1)
+        20.times { |i| observe(days_ago: i + 1, subject: peer_a, value: 118, minute: 1) }
+        20.times { |i| observe(days_ago: i + 1, subject: peer_b, value: 121, minute: 2) }
+      end
+
+      it "compares against the program when the personal record cannot carry it" do
+        personal = profile
+        cohort = profile(baseline: "cohort")
+
+        expect(personal.baseline_sufficiency).not_to be_sufficient
+        expect(cohort.baseline_sufficiency).to be_sufficient
+        expect(cohort).to be_comparable
+      end
+
+      # Comparing someone against a population they are inside of pulls the
+      # population toward them.
+      it "excludes the subject under examination from their own prior" do
+        cohort = profile(baseline: "cohort")
+
+        expect(cohort.coverage_stats.index_by(&:label)["Readings"].baseline).to eq(40)
+      end
+
+      # SC §64: "UI must say so."
+      it "names itself as a cohort prior and states what that costs" do
+        base = profile(baseline: "cohort").baseline_sufficiency
+
+        expect(base.label).to eq("Program population prior")
+        expect(base.note).to match(/cohort prior/i)
+        expect(base.note).to match(/STRONG/)
+      end
+
+      # A cohort prior is a different population measured over the whole
+      # range; it never gave any days up to the selection. Subtracting anyway
+      # printed "21/5".
+      it "gives the prior the whole range as its denominator" do
+        stats = profile(baseline: "cohort").coverage_stats.index_by(&:label)
+        covered, total = stats["Days with a reading"].baseline.split("/").map(&:to_i)
+
+        expect(total).to eq(range.days)
+        expect(covered).to be <= total
+      end
+
+      it "names the personal baseline as a personal comparison, not a normal" do
+        expect(profile.baseline_sufficiency.label).to match(/other readings/i)
+        expect(profile.baseline_sufficiency.note).to match(/not a universal normal/i)
+      end
+
+      # SC §73: never silently choose a different baseline.
+      it "defaults to the personal record rather than quietly switching" do
+        expect(profile.baseline_mode).to eq("rest")
+        expect(profile(baseline: "nonsense").baseline_mode).to eq("rest")
       end
     end
   end

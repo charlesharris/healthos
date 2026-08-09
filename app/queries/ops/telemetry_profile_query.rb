@@ -155,8 +155,40 @@ module Ops
     # top-N reads as "these are all of them".
     MAX_ROWS = 8
 
+    # What the selection is compared against.
+    #
+    # SC §20: "There is no universal normal." A baseline is a stated,
+    # defensible answer to "what counts as usual", and the reader has to be
+    # able to see which question was asked — so the mode is named on screen,
+    # never inferred.
+    #
+    # `rest` is this subject's own other readings in the window. It is the
+    # honest default for a within-subject question, and it is also the one
+    # that runs out: a subject with three weeks of daily readings has at most
+    # 21 usable days, and a selection covering most of them leaves a baseline
+    # too thin to compare against.
+    #
+    # `cohort` is SC §64's cohort prior — the rest of the program over the
+    # same window. It exists because the personal baseline being immature is
+    # the normal case early on, not an edge case. SC §64: "UI must say so",
+    # and evidence resting on it "cannot receive STRONG individual-level
+    # evidence in v0.1".
+    BASELINE_MODES = %w[rest cohort].freeze
+    DEFAULT_BASELINE_MODE = "rest"
+
+    # Read from governed configuration (STAT-044), never restated here. The
+    # view quotes them when it refuses a comparison, so an operator can see
+    # which bar was not cleared rather than being told "not enough" and left
+    # to guess.
+    class << self
+      def minimum_baseline_units = Analysis::StatisticalConfig.instance.baseline("minimum_usable_units")
+      def minimum_baseline_span = Analysis::StatisticalConfig.instance.baseline("minimum_calendar_span_days")
+      def minimum_affected_units = Analysis::StatisticalConfig.instance.affected_window("minimum_usable_units")
+      def minimum_affected_span = Analysis::StatisticalConfig.instance.affected_window("minimum_calendar_span_days")
+    end
+
     def initialize(organization:, range:, selection:, subject: nil, semantic_key: nil,
-                   preferred_keys: [], filters: {}, membership: nil)
+                   preferred_keys: [], filters: {}, baseline_mode: nil, membership: nil)
       super(organization: organization, membership: membership)
 
       @subject = subject
@@ -165,9 +197,12 @@ module Ops
       @requested_key = semantic_key
       @preferred_keys = Array(preferred_keys)
       @filters = (filters || {}).stringify_keys.slice(*FILTERABLE.keys).compact_blank
+      @baseline_mode = BASELINE_MODES.include?(baseline_mode.to_s) ? baseline_mode.to_s : DEFAULT_BASELINE_MODE
     end
 
-    attr_reader :subject, :range, :selection, :filters
+    attr_reader :subject, :range, :selection, :filters, :baseline_mode
+
+    def cohort_baseline? = baseline_mode == "cohort"
 
     # Narrows everything on screen — density, marks and every profile — so the
     # chart and the breakdown never describe different populations. Denominators
@@ -313,6 +348,61 @@ module Ops
       ].compact
     end
 
+    # SC §21: a baseline stores usable_units, calendar_span, maturity — and
+    # the reader has to see them, because a comparison against an immature
+    # baseline is a materially weaker claim than one against a mature baseline
+    # (STAT-015) and the two look identical on a bar chart.
+    #
+    # Maturity comes from Analysis::BaselineMaturity against governed
+    # thresholds (STAT-044). Nothing here decides what the numbers mean.
+    Sufficiency = Struct.new(:usable_units, :calendar_span_days, :maturity, :sufficient,
+                             :label, :note, keyword_init: true) do
+      def immature? = maturity == "immature"
+      def sufficient? = sufficient
+    end
+
+    def baseline_sufficiency
+      @baseline_sufficiency ||= begin
+        days = distinct_days(baseline_readings_scope)
+        span = calendar_span(baseline_readings_scope)
+        maturity = Analysis::BaselineMaturity.call(usable_units: days, calendar_span_days: span)
+
+        Sufficiency.new(
+          usable_units: days, calendar_span_days: span, maturity: maturity,
+          sufficient: maturity != "immature",
+          label: cohort_baseline? ? "Program population prior" : "This subject's other readings in the window",
+          note: cohort_baseline? ?
+            "SC §64 cohort prior. Between-subject context: readings from different people are not repeated measures of one person (STAT-021), and evidence resting mainly on a cohort prior cannot reach STRONG individual-level evidence." :
+            "SC §20 personal comparison. Not a universal normal — it is this subject against their own record over this window."
+        )
+      end
+    end
+
+    # SC §23: the affected window has its own minimum and no maturity. It
+    # either clears the bar or the comparison is refused for insufficient
+    # longitudinal evidence (STAT-018).
+    def selection_sufficiency
+      @selection_sufficiency ||= begin
+        days = distinct_days(selection_readings_scope)
+        span = calendar_span(selection_readings_scope)
+
+        Sufficiency.new(
+          usable_units: days, calendar_span_days: span, maturity: nil,
+          sufficient: Analysis::BaselineMaturity.affected_window_sufficient?(
+            usable_units: days, calendar_span_days: span
+          ),
+          label: "Selection", note: nil
+        )
+      end
+    end
+
+    # Whether the two sides can honestly be set against each other at all.
+    #
+    # The screen used to render "0 → 21" with a full-width bar when a drag
+    # covered nearly the whole range and left nothing behind it. Two numbers
+    # side by side is not a comparison when one of them rests on no days.
+    def comparable? = baseline_sufficiency.sufficient? && selection_sufficiency.sufficient?
+
     # Coverage and cadence — the denominators. Before any share, and never a
     # share themselves.
     def coverage_stats
@@ -322,8 +412,14 @@ module Ops
       # box, so both sides can see the same day. Subtracting anyway produced
       # "21/20" — a numerator above its own denominator, which is worse than
       # no denominator at all.
+      # Only a time-only selection against this subject's own record owns its
+      # days outright, leaving the rest to the baseline. A value-bounded
+      # selection shares its days with the baseline; a cohort prior is a
+      # different population measured over the whole range and never gave any
+      # days up. Subtracting in those cases printed a numerator above its own
+      # denominator — "21/5".
       baseline_days =
-        if selection.value_bounded? || selection.none?
+        if cohort_baseline? || selection.value_bounded? || selection.none?
           range.days
         else
           [ range.days - selection.days, 0 ].max
@@ -380,12 +476,29 @@ module Ops
     end
 
     def baseline_readings_scope
+      return cohort_prior_scope if cohort_baseline?
+
       profile_scope.where.not(id: selection_readings_scope.select(:id))
     end
 
-    def covered_days(scope)
-      scope.distinct.count(Arel.sql("date(observed_at)"))
+    # The program, minus the subject being examined — comparing someone
+    # against a population they are inside of pulls the population toward
+    # them, and with 21 of 964 readings that is small but not nothing.
+    def cohort_prior_scope
+      scope = keyed(cohort_observations)
+      focused? ? scope.where.not(subject_id: subject.id) : scope
     end
+
+    def distinct_days(scope) = scope.distinct.count(Arel.sql("date(observed_at)"))
+
+    def calendar_span(scope)
+      first, last = scope.pick(Arel.sql("MIN(observed_at)"), Arel.sql("MAX(observed_at)"))
+      return 0 if first.nil? || last.nil?
+
+      (last.to_date - first.to_date).to_i + 1
+    end
+
+    def covered_days(scope) = distinct_days(scope)
 
     # Counts on both sides of the selection, keyed the same way, merged into
     # the tuple shape build_profile expects.

@@ -112,6 +112,50 @@ land), bulk clinical actions.
 
 ## Decision Log
 
+### 2026-08-09 — the baseline was invented, unstated, and sometimes empty
+
+Raised from review: "it seems to only compare to the patient's data as a
+baseline, which doesn't really work." Correct, and the contract already said
+so — this was applying SC §20–23 and §64, not designing anything.
+
+Three faults, in increasing order of seriousness:
+
+**The baseline had no name.** SC §20: "There is no universal normal." A
+baseline is a stated, defensible answer to "what counts as usual", and the
+screen never said which question it had asked. It now names the baseline in
+use, with SC §21's usable units, calendar span and maturity beside it — a
+comparison against an immature baseline is a materially weaker claim
+(STAT-015) and looks identical on a bar chart.
+
+**A subject's own record runs out.** Twenty-one daily readings give at most 21
+usable days, so a selection covering most of the window leaves nothing to
+compare against — which is the normal cold-start case, not an edge case. SC
+§64 provides for exactly this: a cohort prior, offered explicitly and named
+when used, with the ceiling stated ("evidence resting mainly on a cohort prior
+cannot reach STRONG individual-level evidence"). The prior excludes the
+subject under examination, because comparing someone against a population they
+are inside of pulls the population toward them.
+
+**It rendered a comparison where there was none.** The reported case: a drag
+covering 23 of 28 days left a baseline of *zero readings*, and the strip still
+drew "0 → 21" with a full-width bar. Two numbers side by side are not a
+comparison when one of them rests on no days. The screen now refuses, cites
+which governed bar was not cleared (SC §22 for the baseline, SC §23 for the
+affected window), and offers the program instead. The selection's composition
+stays visible for orientation, visibly not a comparison.
+
+Every threshold comes from `config/statistics/baseline_thresholds.yml` through
+`Analysis::BaselineMaturity` (STAT-044). Nothing here decides what the numbers
+should be, and the view quotes them so an operator can see which bar was
+missed rather than being told "not enough" and left to guess.
+
+And the denominator bug from two days ago, a third time: the cohort prior is a
+different population measured over the whole range and never gave any days up
+to the selection, so subtracting printed "21/5". Three occurrences now, each
+in a new branch of the same calculation — the lesson is that "how many days
+does this side own" belongs in one place, not in a conditional that grows a
+new arm per baseline mode.
+
 ### 2026-08-09 — the exploration loop: drill-down and scope
 
 The chart and the strip could show you a difference and then leave you there.

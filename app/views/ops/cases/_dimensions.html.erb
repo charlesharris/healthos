@@ -22,10 +22,48 @@
 <section class="section">
   <h2 class="section-title">What was different?</h2>
 
+  <%# SC §20: there is no universal normal, so the baseline in use is named
+      rather than implied, and SC §21's usable units, span and maturity travel
+      with it — a comparison against an immature baseline is a materially
+      weaker claim (STAT-015) and looks identical on a bar chart. %>
+  <% base = profile.baseline_sufficiency %>
+  <% sel = profile.selection_sufficiency %>
+
+  <div class="baseline-bar">
+    <span class="baseline-label">Baseline</span>
+    <strong><%= base.label %></strong>
+
+    <span class="baseline-stat">
+      <%= pluralize(base.usable_units, "usable day") %>
+      over <%= pluralize(base.calendar_span_days, "day") %>
+    </span>
+
+    <span class="chip chip-maturity-<%= base.maturity %>"
+          title="SC §21: below the governed minimum is immature; minimum to target is partial; target met is mature.">
+      <%= base.maturity %>
+    </span>
+
+    <span class="spacer"></span>
+
+    <%# SC §64 requires the cohort prior to be offered explicitly and named
+        when used. Comparing a subject only against themselves runs out of
+        data exactly when the personal record is short, which is most of the
+        time early on. %>
+    <span class="baseline-modes">
+      <% Ops::TelemetryProfileQuery::BASELINE_MODES.each do |mode| %>
+        <%= link_to({ "rest" => "vs own record", "cohort" => "vs program" }.fetch(mode),
+                    base_path.merge(baseline: mode),
+                    class: class_names("chart-key", "is-active" => mode == profile.baseline_mode),
+                    data: { turbo_frame: frame_id || "_top" }) %>
+      <% end %>
+    </span>
+  </div>
+
+  <p class="tiny muted" style="margin-bottom:0.5rem"><%= base.note %></p>
+
   <p class="tiny muted" style="margin-bottom:0.5rem">
     <span class="legend-item">
       <span class="legend-swatch" style="background: var(--viz-baseline)"></span> baseline
-      <span class="faint">(everything outside the selection)</span>
     </span>
     &nbsp;
     <span class="legend-item">
@@ -48,7 +86,39 @@
     </p>
   <% end %>
 
-  <div class="dims">
+  <%# Two numbers side by side are not a comparison when one of them rests on
+      no days. The screen used to render "0 → 21" with a full-width bar when a
+      drag covered nearly the whole range and left nothing behind it.
+
+      SC §21 for the baseline (below minimum → immature) and SC §23 for the
+      affected window (a minimum, and no maturity — it either clears the bar
+      or the comparison is refused for insufficient longitudinal evidence,
+      STAT-018). Both thresholds are governed (STAT-044); nothing here decides
+      what they should be. %>
+  <% unless profile.comparable? %>
+    <div class="note note-warn" style="margin-bottom:0.6rem">
+      <strong>Not enough to compare.</strong>
+      <% unless base.sufficient? %>
+        The baseline has <%= pluralize(base.usable_units, "usable day") %> over
+        <%= pluralize(base.calendar_span_days, "day") %>, below the governed minimum
+        (<%= pluralize(Ops::TelemetryProfileQuery.minimum_baseline_units, "day") %> over
+        <%= pluralize(Ops::TelemetryProfileQuery.minimum_baseline_span, "day") %>) — SC §22.
+        <% if profile.baseline_mode == "rest" %>
+          Narrow the selection, or compare against the program instead.
+        <% end %>
+      <% end %>
+      <% unless sel.sufficient? %>
+        The selection has <%= pluralize(sel.usable_units, "usable day") %> over
+        <%= pluralize(sel.calendar_span_days, "day") %>, below the governed minimum for an
+        affected window (<%= pluralize(Ops::TelemetryProfileQuery.minimum_affected_units, "day") %> over
+        <%= pluralize(Ops::TelemetryProfileQuery.minimum_affected_span, "day") %>) — SC §23.
+      <% end %>
+      The composition of the selection is shown below for orientation. It is
+      not a comparison and must not be read as one.
+    </div>
+  <% end %>
+
+  <div class="<%= class_names("dims", "dims-uncomparable" => !profile.comparable?) %>">
     <%# Coverage first. A share over four readings and a share over forty look
         identical on a bar and mean entirely different things. %>
     <div class="dim">

@@ -63,7 +63,8 @@ module Ops
       @telemetry = detail.telemetry_profile(
         semantic_key: params[:key].presence,
         selection: TelemetryProfileQuery::Selection.from_params(params),
-        filters: scope_filters
+        filters: scope_filters,
+        baseline_mode: params[:baseline]
       )
     end
 

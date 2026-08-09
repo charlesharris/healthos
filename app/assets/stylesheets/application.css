@@ -1499,6 +1499,46 @@ html.drawer-open .main { padding-right: calc(var(--drawer-w) + 1.5rem); }
 
 /* ---- "What was different?" dimension strip ---------------------------- */
 
+/* ---- Baseline statement ------------------------------------------------ */
+
+/* SC §20: there is no universal normal, so which baseline is in use is stated
+   rather than implied, with SC §21's usable units, span and maturity beside
+   it — the same bar chart drawn against an immature baseline is a materially
+   weaker claim, and nothing about the bars themselves says so. */
+.baseline-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  padding: 0.4rem 0.55rem;
+  margin-bottom: 0.4rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  font-size: 0.75rem;
+}
+.baseline-label {
+  font-size: 0.625rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.baseline-stat { color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.baseline-modes { display: inline-flex; gap: 0.25rem; }
+
+/* Maturity is ordered, so it takes an ordered ramp rather than a status
+   palette: immature is not an error, it is a shorter record. */
+.chip-maturity-immature { background: var(--warn-soft); border-color: var(--warn-border); color: var(--warn); }
+.chip-maturity-partial { background: var(--surface-sunken); border-color: var(--border-strong); color: var(--text-secondary); }
+.chip-maturity-mature { background: var(--ok-soft); border-color: var(--ok-border); color: var(--ok); }
+
+/* When the two sides cannot honestly be set against each other, the cards
+   stay (the composition is still orientation) but stop looking like a
+   comparison. */
+.dims-uncomparable .dim-bar-baseline span { background: var(--border-strong); }
+.dims-uncomparable .value-baseline { color: var(--text-muted); }
+.dims-uncomparable .shares { text-decoration: line-through; opacity: 0.5; }
+
 /* ---- Scope (the active dimension filters) ------------------------------ */
 
 .scope {
