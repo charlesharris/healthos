@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+# Run the test suite (HO §126).
+#
+# Prepares the test schema as healthos_migrator, then runs RSpec as
+# healthos_app. That split is deliberate: the suite must exercise the same
+# unprivileged role the application uses, so append-only enforcement is
+# verified continuously rather than assumed (ADR-002 Decision 4a-iv).
+
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+if [ "${SKIP_DB_PREPARE:-}" != "1" ]; then
+  HEALTHOS_DB_USER=healthos_migrator bin/rails db:test:prepare
+fi
+
+exec bin/rspec "$@"

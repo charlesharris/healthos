@@ -1,0 +1,155 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [ main ]
+
+jobs:
+  scan_ruby:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          bundler-cache: true
+
+      - name: Scan for common Rails security vulnerabilities using static analysis
+        run: bin/brakeman --no-pager
+      
+      - name: Scan for known security vulnerabilities in gems used
+        run: bin/bundler-audit
+      
+  scan_js:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          bundler-cache: true
+
+      - name: Scan for security vulnerabilities in JavaScript dependencies
+        run: bin/importmap audit
+
+  lint:
+    runs-on: ubuntu-latest
+    env:
+      RUBOCOP_CACHE_ROOT: tmp/rubocop
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          bundler-cache: true
+
+      - name: Prepare RuboCop cache
+        uses: actions/cache@v4
+        env:
+          DEPENDENCIES_HASH: ${{ hashFiles('.ruby-version', '**/.rubocop.yml', '**/.rubocop_todo.yml', 'Gemfile.lock') }}
+        with:
+          path: ${{ env.RUBOCOP_CACHE_ROOT }}
+          key: rubocop-${{ runner.os }}-${{ env.DEPENDENCIES_HASH }}-${{ github.ref_name == github.event.repository.default_branch && github.run_id || 'default' }}
+          restore-keys: |
+            rubocop-${{ runner.os }}-${{ env.DEPENDENCIES_HASH }}-
+
+      - name: Lint code for consistent style
+        run: bin/rubocop -f github
+
+  test:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        # Must match the development server version: ADR-002 Decision 3b
+        # depends on native uuidv7(), which arrived in PostgreSQL 18.
+        image: postgres:18-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U postgres"
+          --health-interval=3s
+          --health-timeout=3s
+          --health-retries=20
+
+    env:
+      RAILS_ENV: test
+      HEALTHOS_DB_HOST: localhost
+      HEALTHOS_DB_PORT: 5432
+      HEALTHOS_DB_PASSWORD: healthos_dev_password
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      # `schema_format = :sql` means Rails shells out to pg_dump, and pg_dump
+      # refuses to run against a newer server. The runner image ships an older
+      # client, so install the matching major version from PGDG rather than
+      # relying on whatever happens to be preinstalled.
+      - name: Install PostgreSQL 18 client
+        run: |
+          sudo install -d /usr/share/postgresql-common/pgdg
+          sudo curl -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc \
+            --fail https://www.postgresql.org/media/keys/ACCC4CF8.asc
+          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] \
+            https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" \
+            | sudo tee /etc/apt/sources.list.d/pgdg.list
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends postgresql-client-18
+          pg_dump --version
+
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          bundler-cache: true
+
+      # The three roles from ADR-002 Decision 4a. Cluster-level objects, so
+      # they cannot come from a migration.
+      - name: Create database roles
+        env:
+          PGPASSWORD: postgres
+        run: psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -f db/roles.sql
+
+      - name: Prepare database
+        env:
+          HEALTHOS_DB_USER: healthos_migrator
+        run: bin/rails db:prepare
+
+      # HO §124 "schema consistency". With structure.sql this means: migrating
+      # must not leave the checked-in dump stale.
+      - name: Check schema is up to date
+        env:
+          HEALTHOS_DB_USER: healthos_migrator
+        run: |
+          bin/rails db:migrate
+          git diff --exit-code db/structure.sql
+
+      # Runs as healthos_app (the database.yml default), so append-only
+      # enforcement is exercised by every example — ADR-002 Decision 4a-iv.
+      # spec/database/privileges_spec.rb is the HO §124 privileges check.
+      - name: Run tests
+        run: bin/rspec
+
+  # The Dockerfile is not exercised by docker-compose in development (see the
+  # epic 001-01 Decision Log), so build it here to stop it rotting.
+  build_image:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Build production image
+        run: docker build -t healthos:ci .
+

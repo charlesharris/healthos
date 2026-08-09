@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+# Start the development server plus the Solid Queue worker (HO §126).
+#
+# The worker runs alongside the web process because every cross-step side
+# effect in this system goes through the outbox and Active Job (S2C-021) —
+# a web-only dev environment would silently never dispatch them.
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+if ! docker compose ps --status running --services 2>/dev/null | grep -q postgres; then
+  echo "postgres is not running; starting Docker dependencies"
+  docker compose up -d postgres minio
+fi
+
+if [ "${SKIP_WORKER:-}" = "1" ]; then
+  exec bin/rails server "$@"
+fi
+
+trap 'kill 0' EXIT
+bin/jobs &
+bin/rails server "$@"

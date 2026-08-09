@@ -40,15 +40,18 @@ semantics in Epic 002); provenance invariants 1–3.
 ## Tasks
 
 ### 001-01 Bootstrap application
-- [ ] Rails 8.1.x app, Ruby 3.4.x, pinned in `.ruby-version`,
+- [x] Rails 8.1.3.1 app, Ruby 3.4.4, pinned in `.ruby-version`,
       `Gemfile.lock`, `Dockerfile`, CI
-- [ ] PostgreSQL, UUID default primary keys, Solid Queue with separate
+- [x] PostgreSQL 18, UUIDv7 primary keys, Solid Queue with separate
       queue database config
-- [ ] Docker compose: web, worker, postgres, object-store (MinIO or
-      similar for dev)
-- [ ] RSpec, lint (rubocop), brakeman, bundler-audit wired into CI
-- [ ] `bin/setup`, `bin/dev`, `bin/test`, `bin/lint`, `bin/security`
-- [ ] Health endpoint + one passing request spec; CI green
+- [x] Docker compose: postgres, object-store (MinIO) — web/worker
+      deviation recorded below
+- [x] RSpec, lint (rubocop), brakeman, bundler-audit wired into CI
+- [x] `bin/setup`, `bin/dev`, `bin/test`, `bin/lint`, `bin/security`
+- [x] Health endpoint + one passing request spec (CI green pending
+      first push — verified locally)
+- [x] Three database roles, privilege manifest and reconcile task
+      (ADR-002 D5), with enforcement proven by spec
 
 ### 001-02 Identity & tenancy
 - [ ] `organizations`, `users`, `organization_memberships` (role on
@@ -179,5 +182,71 @@ Review, multiple monitors, FHIR, CSV import, RLS implementation
 
 ## Decision Log
 
-_(Claude Code appends decisions/deviations here, dated, with contract
-IDs affected.)_
+### 2026-08-08 — 001-01 bootstrap
+
+**PostgreSQL 18 chosen specifically for native `uuidv7()`.**
+ADR-002 Decision 3b specified UUIDv7 generated *application-side*. PG 18
+provides `uuidv7()` in-database, so the column default generates them
+instead. Strictly better: raw SQL insert paths (imports, backfills,
+`bin/replay_envelope`) get time-ordered keys too, rather than only
+ActiveRecord paths. Verified: server 18.4, `uuidv7()` present, spec
+asserts lexical ordering matches insertion order and the version nibble
+is 7. _ADR-002 D4 refined._
+
+**Append-only enforced by privilege revocation, not triggers.**
+Closes the open choice in 001-05 ("DB trigger or `readonly?` — prefer
+service-layer + spec; record decision below"). Implemented per ADR-002
+Decision 4a: `db/privileges.yml` manifest, idempotent
+`db:privileges:apply` hooked into migrate/schema:load/test:prepare, and
+three roles from `db/roles.sql`. Proven end-to-end in
+`spec/database/privileges_spec.rb` against a real table — `DELETE` and
+non-granted-column `UPDATE` raise `permission denied`; the D8 annotation
+columns remain updatable. _S2C-022; ADR-002 D5/D8._
+
+**The test suite runs as `healthos_app`, so `maintain_test_schema!`
+had to go.** It repairs schema drift in-process, which needs `CREATE` on
+schema public — precisely what the app role must not have (ADR-002
+4a-iv). Replaced in `spec/rails_helper.rb` with
+`check_all_pending!`, which verifies without repairing and points the
+developer at `bin/test`. `bin/test` prepares the schema as
+`healthos_migrator` first. This is the enforcement working, not a
+workaround: if the test role could create tables it could also rewrite
+evidence, and the guarantee would go untested until production.
+
+**Rails internal tables are created explicitly by the migrator.** With
+zero migrations, `structure.sql` is empty and `schema_migrations` never
+gets created, so the app role failed to boot with a confusing privilege
+error. `apply_to_env!` now creates `schema_migrations` and
+`ar_internal_metadata` as migrator, idempotently.
+
+**Deviation: docker compose does not run web/worker.** 001-01 asks for
+web and worker services. The prototype scope is local + CI only, the
+generated Dockerfile targets production, and native `bin/dev` (which
+runs Puma and `bin/jobs` together) is what we will actually use. Rather
+than declare compose services nobody runs, CI builds the production
+image on every commit so the Dockerfile cannot rot. Verified building
+locally. _Revisit if a hosted environment appears — see
+prototype-scope.md "Known tension"._
+
+**Local `pg_dump` is a hard dependency of `schema_format = :sql`.**
+Installed Homebrew `libpq` (18.4, matching the server; a client older
+than the server refuses to dump). It is keg-only, so
+`config/initializers/postgres_client_path.rb` prepends it to `PATH` in
+dev/test rather than editing the developer's shell profile. CI installs
+`postgresql-client-18` from PGDG for the same reason — the runner image
+ships an older client.
+
+**Separate queue database in every environment**, not just
+production-like ones (HO §6.3 says "prefer"). Keeping dev and test on
+the same two-connection shape means the split is exercised rather than
+merely configured. The queue database gets blanket DML: it is Solid
+Queue's job state, gem-managed, and no health evidence lives there.
+
+**Postgres 18 images changed the data volume path** to
+`/var/lib/postgresql` (from `/var/lib/postgresql/data`). Mounting the
+old path fails at startup with a pg_upgrade warning.
+
+Not yet verified: **CI green**. The workflow cannot run until the branch
+is pushed. Every job was reproduced locally (rubocop clean, brakeman 0
+warnings, bundler-audit clean, 14 examples 0 failures, image builds,
+`structure.sql` stable across re-migrate).

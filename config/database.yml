@@ -1,0 +1,65 @@
+# PostgreSQL configuration.
+#
+# ADR-002 Decision 4a — three disjoint roles:
+#
+#   healthos_app       Rails runtime. SELECT/INSERT on append-only tables,
+#                      full DML on mutable ones. This is what the app, the
+#                      console and the test suite connect as, so append-only
+#                      enforcement is exercised everywhere (Decision 4a-iv).
+#   healthos_migrator  Owns the schema and runs migrations.
+#   healthos_admin     Retention and support operations. Audited (HO §157).
+#
+# The role is chosen by HEALTHOS_DB_USER rather than by a separate config
+# block, so every database entry below switches together. Migrations run as:
+#
+#   HEALTHOS_DB_USER=healthos_migrator bin/rails db:migrate
+#
+# which is what bin/setup and the CI workflow do.
+
+default: &default
+  adapter: postgresql
+  encoding: unicode
+  max_connections: <%= ENV.fetch("RAILS_MAX_THREADS") { 5 } %>
+  host: <%= ENV.fetch("HEALTHOS_DB_HOST", "localhost") %>
+  port: <%= ENV.fetch("HEALTHOS_DB_PORT", 5432) %>
+  username: <%= ENV.fetch("HEALTHOS_DB_USER", "healthos_app") %>
+  password: <%= ENV.fetch("HEALTHOS_DB_PASSWORD", "healthos_dev_password") %>
+
+# Solid Queue runs on its own database (HO §6.3: "prefer a separate queue
+# database/connection in production-like environments so queue churn does not
+# contend unnecessarily with health-data tables"). Kept separate in every
+# environment so the two-connection setup is exercised, not just declared.
+development:
+  primary:
+    <<: *default
+    database: healthos_development
+  queue:
+    <<: *default
+    database: healthos_development_queue
+    migrations_paths: db/queue_migrate
+
+test:
+  primary:
+    <<: *default
+    database: healthos_test
+  queue:
+    <<: *default
+    database: healthos_test_queue
+    migrations_paths: db/queue_migrate
+
+production:
+  primary: &primary_production
+    <<: *default
+    database: healthos_production
+  cache:
+    <<: *primary_production
+    database: healthos_production_cache
+    migrations_paths: db/cache_migrate
+  queue:
+    <<: *primary_production
+    database: healthos_production_queue
+    migrations_paths: db/queue_migrate
+  cable:
+    <<: *primary_production
+    database: healthos_production_cable
+    migrations_paths: db/cable_migrate

@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+# Security scanning (HO §124: "security scanner" + "dependency audit").
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+echo "== brakeman =="
+bundle exec brakeman --no-pager --quiet
+
+echo
+echo "== bundler-audit =="
+bundle exec bundler-audit check --update

@@ -1,0 +1,107 @@
+# Database privilege manifest — ADR-002 Decision 4a / 4a-v.
+#
+# The single source of truth for which tables are append-only. Read by both
+# `bin/rails db:privileges:apply` and the specs in
+# spec/database/privileges_spec.rb, so enforcement and verification cannot
+# drift apart.
+#
+# Privileges cannot live in structure.sql: ActiveRecord's
+# PostgreSQLDatabaseTasks#structure_dump hard-codes `--no-privileges`. They are
+# therefore reconciled by an idempotent task hooked into db:migrate,
+# db:schema:load and db:test:prepare.
+#
+# Adding a table? It must appear in exactly one of `append_only` or `mutable`,
+# or spec/database/privileges_spec.rb fails. That completeness check is the
+# point: an earlier draft of ADR-002 classified these from memory and missed
+# seven tables. Tables listed here that do not exist yet are skipped by the
+# apply task — the list is deliberately ahead of the migrations.
+
+# The app role may SELECT and INSERT, never UPDATE or DELETE.
+# Deletion for retention/collection is healthos_admin's job (Decision 4a-iii).
+append_only:
+  # Raw evidence — HO §13.1 "RawEnvelope records are append-only"; INV-1
+  - raw_envelopes
+
+  # Canonical telemetry — INV-2/3; HO §154 "avoid rewriting raw evidence"
+  - observations
+  - observation_groups
+  - events
+  - intervals
+  - derived_signals
+
+  # Evidence graph — INV-3 exact lineage
+  - evidence_sets
+  - evidence_items
+
+  # Monitoring — S2C-001 Signal immutability; HO §32 evaluation record
+  - monitor_evaluations
+  - signals
+
+  # Case history — S2C-010 append-only timeline; S2C-016 reopen preserves
+  - case_events
+  - case_dispositions
+
+  # Analysis artifacts — HO §50 "completed ... immutable analytical artifacts"
+  - contexts
+  - context_values
+  - baseline_instances
+  - comparisons
+  - differences
+  - findings
+  - finding_differences
+
+  # Saved investigations — HO §188 lists "saved Investigations mutate" as a
+  # do-not-ship condition. Annotation columns are exempted below.
+  - investigations
+
+  # Governance — HO §92
+  - audit_events
+
+# The app role has full DML. Each entry is a decision, not an omission.
+mutable:
+  # Identity and tenancy
+  - organizations
+  - users
+  - organization_memberships
+  - teams
+  - team_memberships
+  - subjects
+  - subject_identities
+  - subject_identifiers
+
+  # Sources — status, last_success_at/last_failure_at change over time
+  - sources
+  - devices
+
+  # Monitoring configuration — per-org enable/disable and parameters, HO §31
+  - monitor_configurations
+
+  # Operational case state
+  - case_correlation_scopes   # lock row, HO §35
+  - cases                     # the stateful unit of human work, HO §36
+  - watch_conditions          # satisfied/cancelled, HO §45
+  - workflow_actions          # retry and dispatch state
+
+  # Infrastructure
+  - domain_events             # the outbox updates dispatch state, HO §49
+  - integration_credentials   # rotation
+
+# Rails-managed tables. Classified so the completeness spec has a home for
+# them rather than a special case.
+system:
+  - schema_migrations
+  - ar_internal_metadata
+
+# Column-level UPDATE exceptions on append-only tables — ADR-002 Decision
+# 4a-ii, resolved 2026-08-08: notes stay editable after save.
+#
+# Table-level revocation would be too blunt here; these tables are historical
+# records that nonetheless carry user-editable prose. The pinned evidence
+# columns stay immutable, which is what HO §188 and STAT-040/041 actually
+# require. The spec asserts both directions.
+column_updates:
+  investigations:
+    - question
+    - notes
+  case_dispositions:
+    - notes

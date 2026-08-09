@@ -1,6 +1,5 @@
 *.rbc
 capybara-*.html
-.rspec
 /db/*.sqlite3
 /db/*.sqlite3-journal
 /db/*.sqlite3-[0-9]*
@@ -67,3 +66,15 @@ yarn-debug.log*
 /storage/*
 !/storage/.keep
 /public/uploads
+
+# Rails 8 / Propshaft
+/app/assets/builds/*
+!/app/assets/builds/.keep
+/tmp/storage/*
+!/tmp/storage/.keep
+/tmp/pids/*
+!/tmp/pids/.keep
+
+# Local database credentials for the three-role setup (ADR-002 4a).
+# Role passwords are dev-only but still never committed.
+/config/database.local.yml

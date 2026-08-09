@@ -1,0 +1,76 @@
+# Local development dependencies (epic 001-01).
+#
+# Scope note: docs/implementation/prototype-scope.md sets deployment to
+# "local + CI only for now". This file is the development environment, not a
+# deployment reference — HO §6.6 (containerised web/workers, managed Postgres,
+# managed secrets) stays a target shape, not something we stand up yet.
+
+name: healthos
+
+services:
+  postgres:
+    # PostgreSQL 18 for native uuidv7(). ADR-002 Decision 3b wants time-ordered
+    # primary keys; 18 provides them in-database, so raw SQL insert paths
+    # (imports, backfills) get them too rather than only ActiveRecord paths.
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: postgres
+    ports:
+      - "${HEALTHOS_DB_PORT:-5432}:5432"
+    volumes:
+      # Postgres 18+ images store data in a major-version subdirectory, so the
+      # mount goes at /var/lib/postgresql rather than the pre-18
+      # /var/lib/postgresql/data. Mounting the old path fails at startup.
+      - postgres_data:/var/lib/postgresql
+      # Creates the three roles from ADR-002 Decision 4a. Runs only on first
+      # initialisation of an empty data volume; bin/setup applies it
+      # idempotently thereafter.
+      - ./db/roles.sql:/docker-entrypoint-initdb.d/10-roles.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  minio:
+    # Object storage for raw source payloads (HO §6.5).
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: healthos
+      MINIO_ROOT_PASSWORD: healthos_dev_password
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  # Creates the raw-payload bucket with OBJECT LOCKING ENABLED.
+  #
+  # ADR-002 Decision 4b: object lock is what makes raw source truth genuinely
+  # append-only (INV-1), and it can only be enabled at bucket creation — it
+  # cannot be turned on later. Getting it right in development is the whole
+  # point of exercising it here rather than assuming it in production.
+  minio_setup:
+    image: minio/mc:latest
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      mc alias set local http://minio:9000 healthos healthos_dev_password &&
+      mc mb --with-lock --ignore-existing local/healthos-raw-payloads &&
+      mc mb --ignore-existing local/healthos-exports &&
+      echo 'buckets ready (healthos-raw-payloads has object locking enabled)'
+      "
+
+volumes:
+  postgres_data:
+  minio_data:

@@ -1,0 +1,68 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+# Set up or update the development environment (HO §126). Idempotent.
+#
+# Brings up the Docker dependencies, creates the three database roles from
+# ADR-002 Decision 4a, then prepares the schema as healthos_migrator. Note
+# that everything database-touching runs as an explicit role: this project
+# never connects as a superuser, in development or anywhere else, because
+# append-only enforcement is only real if the role that runs the app lacks
+# the privilege to break it (Decision 4a-iv).
+
+require "fileutils"
+
+APP_ROOT = File.expand_path("..", __dir__)
+
+def system!(*args)
+  system(*args, exception: true)
+end
+
+def migrator(command)
+  system!({ "HEALTHOS_DB_USER" => "healthos_migrator" }, command)
+end
+
+FileUtils.chdir APP_ROOT do
+  puts "== Installing dependencies =="
+  system("bundle check") || system!("bundle install")
+
+  puts "\n== Starting Docker dependencies (postgres, minio) =="
+  system! "docker compose up -d postgres minio"
+
+  print "   waiting for postgres"
+  40.times do
+    status = `docker inspect --format='{{.State.Health.Status}}' healthos-postgres-1 2>/dev/null`.strip
+    break if status == "healthy"
+
+    print "."
+    sleep 2
+  end
+  puts " ready"
+
+  # Buckets, including object locking on the raw-payload bucket. Object lock
+  # can only be enabled at bucket creation (ADR-002 Decision 4b), so this is
+  # not something to defer to production.
+  puts "\n== Ensuring object storage buckets =="
+  system! "docker compose run --rm minio_setup"
+
+  # Roles are cluster-level, so they cannot come from a migration. The compose
+  # file applies db/roles.sql on first initialisation of an empty volume; this
+  # re-applies it idempotently for volumes that already exist.
+  puts "\n== Ensuring database roles =="
+  system! "docker compose exec -T postgres psql -q -U postgres -d postgres < db/roles.sql"
+
+  puts "\n== Preparing databases =="
+  migrator "bin/rails db:prepare"
+
+  puts "\n== Verifying privileges =="
+  migrator "bin/rails db:privileges:apply"
+
+  puts "\n== Removing old logs and tempfiles =="
+  system! "bin/rails log:clear tmp:clear"
+
+  puts "\n== Done =="
+  puts "   bin/dev      start the app"
+  puts "   bin/test     run the suite"
+  puts "   bin/lint     rubocop"
+  puts "   bin/security brakeman + bundler-audit"
+end

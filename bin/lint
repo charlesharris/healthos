@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+# Style and static analysis (HO §126). Pass -a to autocorrect.
+set -euo pipefail
+cd "$(dirname "$0")/.."
+exec bundle exec rubocop "$@"
