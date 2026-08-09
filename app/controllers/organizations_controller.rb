@@ -6,6 +6,10 @@
 class OrganizationsController < ApplicationController
   allow_without_organization only: %i[chooser choose no_access]
 
+  # No tenant is established yet on these two, so the shell has nothing
+  # truthful to put in its top bar.
+  layout "doorway", only: %i[chooser no_access]
+
   def chooser
     @memberships = Current.user.usable_memberships.includes(:organization)
   end

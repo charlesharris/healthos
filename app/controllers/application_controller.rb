@@ -18,6 +18,16 @@ class ApplicationController < ActionController::Base
               ActiveRecord::RecordNotFound,
               with: :not_found
 
+  # The rail hides the Admin entry from anyone who is not platform staff.
+  # Memoized because the layout asks on every request; nil is a valid answer
+  # and is cached as one.
+  helper_method :current_staff_member
+  def current_staff_member
+    return @current_staff_member if defined?(@current_staff_member)
+
+    @current_staff_member = StaffMember.for(Current.user)
+  end
+
   private
 
   def not_found

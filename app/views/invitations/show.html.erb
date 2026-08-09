@@ -1,8 +1,20 @@
-<h1>Join <%= @invitation.organization.name %></h1>
-<p>Invited as <%= @invitation.role.humanize %> (<%= @invitation.email_address %>)</p>
+<% content_for :title, "Accept invitation" %>
 
-<%= form_with url: accept_invitation_path, method: :post do |f| %>
-  <%= f.hidden_field :token, value: @token %>
-  <%= f.password_field :password, required: true, placeholder: "Choose a password" %>
-  <%= f.submit "Accept invitation" %>
-<% end %>
+<div class="doorway-card">
+  <h1>Join <%= @invitation.organization.name %></h1>
+  <p class="small muted" style="margin-bottom:0.9rem">
+    Invited as <strong><%= @invitation.role.humanize %></strong> — <%= @invitation.email_address %>
+  </p>
+
+  <%= form_with url: accept_invitation_path, method: :post do |f| %>
+    <%= f.hidden_field :token, value: @token %>
+
+    <div class="field">
+      <%= f.label :password, "Choose a password" %>
+      <%= f.password_field :password, required: true, autofocus: true,
+                           autocomplete: "new-password", maxlength: 72 %>
+    </div>
+
+    <%= f.submit "Accept invitation", class: "btn btn-primary" %>
+  <% end %>
+</div>

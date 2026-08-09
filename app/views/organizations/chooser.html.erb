@@ -1,10 +1,16 @@
-<h1>Choose an organization</h1>
-<ul>
+<% content_for :title, "Choose an organization" %>
+
+<div class="doorway-card">
+  <h1>Choose an organization</h1>
+  <p class="small muted" style="margin-bottom:0.9rem">
+    Every query you run is scoped to the tenant you pick (HO §12).
+  </p>
+
   <% @memberships.each do |membership| %>
-    <li>
-      <%= button_to membership.organization.name,
-            choose_organization_path(organization_id: membership.organization_id) %>
-      <span><%= membership.role.humanize %></span>
-    </li>
+    <%= button_to choose_organization_path(organization_id: membership.organization_id),
+                  class: "org-choice", form_class: "org-choice-form" do %>
+      <strong><%= membership.organization.name %></strong>
+      <span class="role"><%= membership.role.humanize %></span>
+    <% end %>
   <% end %>
-</ul>
+</div>

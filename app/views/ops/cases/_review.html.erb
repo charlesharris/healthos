@@ -1,0 +1,233 @@
+<%# Quick Review (HO §88), rendered identically in the drawer and on the full
+    page — one partial, so the two can never drift into different answers to
+    "what does this Case say".
+
+    "Most Cases should be resolvable without opening the full Workbench." So
+    this answers, in order: why is this here, what is the evidence, what
+    happened, who owns it, what can I do about it.
+
+    Work reason is the heading. Subject identity appears once, as an opaque
+    handle — never a name, never an MRN (HO §84, §92).
+
+    Locals: case_record, trigger_attachments, other_attachments, timeline,
+    drawer. %>
+<div class="<%= class_names("review", "review-drawer" => drawer) %>">
+  <header class="review-head">
+    <div class="row-wrap">
+      <%= priority_chip(case_record.review_priority) %>
+      <%= status_chip(case_record.status) %>
+      <%= analysis_chip(case_record.analysis_status) %>
+
+      <% if drawer %>
+        <button type="button" class="drawer-close" data-drawer-close
+                data-action="click->drawer#close" aria-label="Close Quick Review">×</button>
+      <% end %>
+    </div>
+
+    <h1 class="review-title"><%= case_record.title.presence || case_record.case_type.humanize %></h1>
+
+    <span class="review-handle">
+      <%= case_record.subject.public_id %> · <%= case_record.public_id %>
+    </span>
+
+    <% if drawer %>
+      <p class="tiny" style="margin-top:0.4rem">
+        <%= link_to "Open full review →", ops_case_path(case_record), data: { turbo_frame: "_top" } %>
+      </p>
+    <% end %>
+  </header>
+
+  <div class="review-body">
+    <div class="review-columns">
+      <div class="review-main">
+        <section class="section">
+          <h2 class="section-title">Why is this here?</h2>
+
+          <%# The trigger Signals and their attributes, not a restatement of
+              the title. A Signal is immutable machine evidence (S2C-001);
+              this is the machine's actual claim, with the monitor and version
+              that made it, so a reader can judge it rather than take it on
+              faith. %>
+          <% if trigger_attachments.empty? %>
+            <p class="note">No trigger Signal is attached to this Case.</p>
+          <% else %>
+            <% trigger_attachments.each do |attachment| %>
+              <% signal = attachment.signal %>
+              <article class="signal">
+                <div class="signal-head">
+                  <h3><%= signal.signal_type.humanize %></h3>
+                  <span class="chip chip-mono"><%= signal.severity %></span>
+                </div>
+
+                <dl class="attrs">
+                  <dt>Detected</dt>
+                  <dd><%= l(signal.detected_at.in_time_zone, format: :short) %></dd>
+
+                  <dt>Window</dt>
+                  <dd>
+                    <%= l(signal.window_started_at.in_time_zone, format: :short) %> →
+                    <%= signal.window_ended_at ? l(signal.window_ended_at.in_time_zone, format: :short) : "open" %>
+                  </dd>
+
+                  <% signal.attributes_json.each do |key, value| %>
+                    <dt><%= key.humanize %></dt>
+                    <dd><%= value.is_a?(Hash) || value.is_a?(Array) ? value.to_json : value %></dd>
+                  <% end %>
+                </dl>
+
+                <%# Versioning and provenance are the point, not a footnote:
+                    a claim you cannot attribute to a specific monitor version
+                    is not evidence. %>
+                <p class="signal-provenance">
+                  <%= signal.monitor %> · digest <%= signal.monitor_digest.first(12) %>
+                </p>
+              </article>
+            <% end %>
+          <% end %>
+
+          <% if other_attachments.any? %>
+            <h3 class="section-title" style="margin-top:0.9rem">Also attached</h3>
+            <% other_attachments.each do |attachment| %>
+              <article class="signal">
+                <div class="signal-head">
+                  <h3><%= attachment.signal.signal_type.humanize %></h3>
+                  <span class="chip chip-mono"><%= attachment.relationship %></span>
+                  <span class="tiny faint"><%= l(attachment.signal.detected_at.in_time_zone, format: :short) %></span>
+                </div>
+
+                <%# §158: why correlation attached this Signal to this Case. %>
+                <% if attachment.explanation.present? %>
+                  <p class="tiny muted" style="margin:0">
+                    <%= attachment.explanation["explanation"] || attachment.explanation.to_json %>
+                  </p>
+                <% end %>
+                <p class="signal-provenance"><%= attachment.signal.monitor %></p>
+              </article>
+            <% end %>
+          <% end %>
+        </section>
+      </div>
+
+
+      <aside class="review-rail">
+        <section class="section">
+          <h2 class="section-title">Case</h2>
+
+          <dl class="facts">
+            <dt>Subject</dt>
+            <dd><%= subject_handle(case_record.subject) %></dd>
+
+            <dt>Program</dt>
+            <dd><%= case_record.domain_key %></dd>
+
+            <dt>Case type</dt>
+            <dd><%= case_record.case_type.humanize %></dd>
+
+            <dt>Owner</dt>
+            <dd><%= case_record.owner&.email_address || tag.span("unassigned", class: "owner-none") %></dd>
+
+            <dt>Team</dt>
+            <dd><%= case_record.team&.name || tag.span("no team", class: "faint") %></dd>
+
+            <dt>Detected</dt>
+            <dd><%= timestamp(case_record.detected_at) %></dd>
+
+            <dt>Last reviewed</dt>
+            <dd>
+              <% if case_record.last_reviewed_at %>
+                <%= timestamp(case_record.last_reviewed_at) %>
+              <% else %>
+                <span class="faint">never</span>
+              <% end %>
+            </dd>
+          </dl>
+        </section>
+
+        <section class="section">
+          <%# S2C-011: review priority is operational policy — how soon a
+              human should look — and is independent of how strong the
+              statistical evidence is. The reasons are shown because no Case
+              may carry an unexplained ranking (S2C-012). %>
+          <h2 class="section-title">Review priority</h2>
+
+          <div class="row-wrap"><%= priority_chip(case_record.review_priority) %></div>
+
+          <ul class="reason-list">
+            <% case_record.priority_reasons.each do |reason| %>
+              <li>
+                <span class="reason-code"><%= reason["code"] %></span>
+                <%= reason["explanation"] %>
+              </li>
+            <% end %>
+          </ul>
+        </section>
+
+        <section class="section">
+          <h2 class="section-title">Analysis</h2>
+
+          <dl class="facts">
+            <dt>State</dt>
+            <dd><%= analysis_chip(case_record.analysis_status) %></dd>
+
+            <dt>Evidence</dt>
+            <dd><%= evidence_meter(case_record.evidence_level) %></dd>
+
+            <dt>Data quality</dt>
+            <dd><%= qualitative(case_record.data_quality_state) %></dd>
+
+            <dt>Baseline</dt>
+            <dd><%= qualitative(case_record.baseline_maturity) %></dd>
+
+            <% if case_record.analysis_as_of %>
+              <dt>As of</dt>
+              <dd><%= timestamp(case_record.analysis_as_of) %></dd>
+            <% end %>
+          </dl>
+
+          <%# S2C-019: `failed` means the analysis broke and someone should
+              look; `insufficient_evidence` means the analysis ran and
+              honestly reported that the data does not support a conclusion
+              (STAT-036) — a successful outcome. Conflating them would turn an
+              honest answer into an incident, and an incident into an honest
+              answer. %>
+          <% if case_record.analysis_status == "failed" %>
+            <p class="note note-warn" style="margin-top:0.5rem">
+              Analysis did not complete. The Case is unaffected and still needs handling.
+            </p>
+          <% elsif case_record.analysis_status == "insufficient_evidence" %>
+            <p class="note" style="margin-top:0.5rem">
+              Analysis completed and found no reliable distinguishing pattern.
+              That is a result, not a failure.
+            </p>
+          <% end %>
+        </section>
+
+        <%= render "ops/cases/actions", case_record: case_record, drawer: drawer %>
+      </aside>
+      <%# Placed after the rail in source order so that stacked — in the
+          drawer, or on a narrow page — the actions come before the history.
+          On a wide page CSS puts it back under the evidence. %>
+      <div class="review-history">
+        <section class="section">
+          <h2 class="section-title">Timeline</h2>
+
+          <%# HO §90: observations, signals, case events, dispositions and
+              workflow actions on one axis, newest last. Read-only over
+              append-only sources. %>
+          <ol class="timeline">
+            <% timeline.each do |entry| %>
+              <li>
+                <span class="at"><%= l(entry.at.in_time_zone, format: :short) %></span>
+                <span class="what">
+                  <span class="kind"><%= entry.kind.humanize %></span>
+                  <span class="summary"><%= entry.summary %></span>
+                  <%= timeline_detail(entry.detail) %>
+                </span>
+              </li>
+            <% end %>
+          </ol>
+        </section>
+      </div>
+    </div>
+  </div>
+</div>

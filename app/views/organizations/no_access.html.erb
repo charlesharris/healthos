@@ -1,3 +1,13 @@
-<h1>No organization access</h1>
-<p>Your account is not an active member of any organization.</p>
-<%= button_to "Sign out", session_path, method: :delete %>
+<% content_for :title, "No organization access" %>
+
+<div class="doorway-card">
+  <h1>No organization access</h1>
+  <p class="small muted">
+    Your account is not an active member of any organization. An organization
+    admin has to invite you, or restore a suspended membership, before there
+    is anything here to see.
+  </p>
+
+  <%= button_to "Sign out", session_path, method: :delete,
+                class: "btn btn-block", form_class: "menu-form", form: { style: "margin-top:0.9rem" } %>
+</div>

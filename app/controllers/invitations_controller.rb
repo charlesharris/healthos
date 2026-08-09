@@ -6,6 +6,10 @@
 class InvitationsController < ApplicationController
   allow_unauthenticated_access only: %i[show accept]
 
+  # Accepting an invitation happens before the invitee has any tenant, so it
+  # gets the doorway rather than the shell.
+  layout "doorway", only: %i[show accept]
+
   def index
     authorize!(Invitation, :index?)
     @invitations = Invitation.where(organization: Current.organization).order(created_at: :desc)

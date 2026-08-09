@@ -1,0 +1,159 @@
+<%# The moves available from here, and only those.
+
+    Locals: case_record, drawer.
+
+    In the drawer, every form carries `row` and `drawer` so the response can
+    refresh the queue row behind the panel and the panel itself in one Turbo
+    stream. On the full page neither is sent and the controllers redirect,
+    which is why both paths keep working without JavaScript. %>
+<% context_fields = capture do %>
+  <% if drawer %>
+    <%# id: nil — these fields repeat across every action form on the panel,
+        and duplicate DOM ids break label association and assistive tech. %>
+    <%= hidden_field_tag :row, "1", id: nil %>
+    <%= hidden_field_tag :drawer, "1", id: nil %>
+  <% end %>
+<% end %>
+
+<% if case_record.resolved? %>
+  <section class="section">
+    <h2 class="section-title">Resolution</h2>
+
+    <% if (disposition = case_record.latest_disposition) %>
+      <dl class="facts">
+        <dt>Disposition</dt>
+        <dd><strong><%= disposition.code.humanize %></strong></dd>
+        <% if disposition.notes.present? %>
+          <dt>Notes</dt>
+          <dd><%= disposition.notes %></dd>
+        <% end %>
+      </dl>
+    <% end %>
+
+    <p class="note" style="margin-top:0.5rem">
+      This Case is <%= case_record.status %>. Reopening is not a manual action —
+      only a new compatible Signal reopens a Case (S2C-016), and the history
+      above is retained when it does.
+    </p>
+  </section>
+<% else %>
+  <section class="section">
+    <h2 class="section-title">Assignment</h2>
+
+    <%= form_with url: ops_case_assignment_path(case_record), method: :patch, class: "action-form" do %>
+      <%= context_fields %>
+
+      <div class="field">
+        <%= label_tag "assignment[owner_id]", "Owner" %>
+        <%= select_tag "assignment[owner_id]",
+                       options_from_collection_for_select(assignment_options.owners, :id, :email_address,
+                                                          case_record.owner_id),
+                       include_blank: "unassigned" %>
+      </div>
+
+      <div class="field">
+        <%= label_tag "assignment[team_id]", "Team" %>
+        <%= select_tag "assignment[team_id]",
+                       options_from_collection_for_select(assignment_options.teams, :id, :name,
+                                                          case_record.team_id),
+                       include_blank: "no team" %>
+      </div>
+
+      <%= submit_tag "Update assignment", class: "btn btn-sm" %>
+    <% end %>
+  </section>
+
+  <%# The buttons offered are exactly the moves Cases::Transition's legality
+      table permits from here — the UI reads that table rather than keeping a
+      second copy of the rules that could drift from it (S2C-013). %>
+  <% allowed = Cases::Transition::ALLOWED.fetch(case_record.status) %>
+  <% simple = allowed - Cases::Transition::CLOSING_STATES - [ "watching" ] %>
+
+  <% if simple.any? %>
+    <section class="section">
+      <h2 class="section-title">Move this Case</h2>
+
+      <div class="actions-group">
+        <% simple.each do |state| %>
+          <% label = { "triaged" => "Triage", "investigating" => "Start investigating",
+                       "waiting_external" => "Waiting on external action" }.fetch(state, state.humanize) %>
+          <%= form_with url: ops_case_state_path(case_record), method: :patch do %>
+            <%= context_fields %>
+            <%= hidden_field_tag "state[to]", state %>
+            <%= submit_tag label, class: "btn btn-sm" %>
+          <% end %>
+        <% end %>
+      </div>
+    </section>
+  <% end %>
+
+  <% if allowed.include?("watching") %>
+    <section class="section">
+      <%# HO §45: watching means review happened and the evidence does not
+          justify closure or action yet. It requires a stated condition for
+          coming back — a watch with no condition is a Case quietly
+          abandoned. %>
+      <h2 class="section-title">Watch</h2>
+
+      <%= form_with url: ops_case_state_path(case_record), method: :patch, class: "action-form" do %>
+        <%= context_fields %>
+        <%= hidden_field_tag "state[to]", "watching" %>
+
+        <div class="field">
+          <%= label_tag "state[watch_condition_type]", "Come back when" %>
+          <%= select_tag "state[watch_condition_type]",
+                         options_for_select(Cases::WatchCondition::CONDITION_TYPES, "time_elapsed"),
+                         required: true %>
+        </div>
+
+        <div class="row" style="gap:0.5rem">
+          <div class="field" style="margin:0">
+            <%= label_tag "state[watch_days]", "Days" %>
+            <%= number_field_tag "state[watch_days]", 7, min: 1 %>
+          </div>
+          <div class="field" style="margin:0">
+            <%= label_tag "state[watch_count]", "Observations" %>
+            <%= number_field_tag "state[watch_count]", nil, min: 1 %>
+          </div>
+        </div>
+
+        <p class="field-hint">A watch with no condition is a Case quietly abandoned.</p>
+        <%= submit_tag "Start watching", class: "btn btn-sm" %>
+      <% end %>
+    </section>
+  <% end %>
+
+  <%# S2C-015: resolving or dismissing REQUIRES a disposition. The select is
+      `required` with no preselected value, so the browser refuses the submit;
+      Cases::Transition refuses it again server-side, because a client-side
+      requirement is a courtesy and not a control. %>
+  <% closing = Cases::Transition::CLOSING_STATES.select { |state| allowed.include?(state) } %>
+
+  <% if closing.any? %>
+    <section class="section">
+      <h2 class="section-title">Close</h2>
+
+      <% closing.each do |state| %>
+        <%= form_with url: ops_case_state_path(case_record), method: :patch,
+                      class: "action-form action-form-closing" do %>
+          <%= context_fields %>
+          <%= hidden_field_tag "state[to]", state %>
+
+          <div class="field">
+            <%= label_tag "state[disposition_code]", "Disposition (required)" %>
+            <%= select_tag "state[disposition_code]",
+                           options_for_select(Cases::Disposition::CODES.map { |c| [ c.humanize, c ] }),
+                           include_blank: "choose a disposition", required: true %>
+          </div>
+
+          <div class="field">
+            <%= label_tag "state[disposition_notes]", "Notes" %>
+            <%= text_field_tag "state[disposition_notes]" %>
+          </div>
+
+          <%= submit_tag "#{state.humanize} Case", class: "btn btn-sm" %>
+        <% end %>
+      <% end %>
+    </section>
+  <% end %>
+<% end %>

@@ -1,29 +1,33 @@
 <!DOCTYPE html>
 <html>
   <head>
-    <title><%= content_for(:title) || "Healthos" %></title>
-    <meta name="viewport" content="width=device-width,initial-scale=1">
-    <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="application-name" content="Healthos">
-    <meta name="mobile-web-app-capable" content="yes">
-    <%= csrf_meta_tags %>
-    <%= csp_meta_tag %>
-
-    <%= yield :head %>
-
-    <%# Enable PWA manifest for installable apps (make sure to enable in config/routes.rb too!) %>
-    <%#= tag.link rel: "manifest", href: pwa_manifest_path(format: :json) %>
-
-    <link rel="icon" href="/icon.png" type="image/png">
-    <link rel="icon" href="/icon.svg" type="image/svg+xml">
-    <link rel="apple-touch-icon" href="/icon.png">
-
-    <%# Includes all stylesheet files in app/assets/stylesheets %>
-    <%= stylesheet_link_tag :app, "data-turbo-track": "reload" %>
-    <%= javascript_importmap_tags %>
+    <%= render "layouts/head" %>
   </head>
 
   <body>
-    <%= yield %>
+    <%# The working shell: a thin top bar carrying tenant and identity, a rail
+        carrying the surfaces, and everything else given to the content. The
+        app had no chrome at all before this — every page began with an <h1>
+        floating at the top-left and no way to reach any other page. %>
+    <div class="shell">
+      <header class="topbar">
+        <%= link_to root_path, class: "brand" do %>
+          <span class="brand-mark" aria-hidden="true"></span>
+          <span>healthos</span>
+        <% end %>
+
+        <span class="topbar-sep" aria-hidden="true">/</span>
+        <%= render "layouts/organization_menu" %>
+
+        <span class="spacer"></span>
+
+        <%= render "layouts/user_menu" %>
+      </header>
+
+      <div class="shell-body">
+        <%= render "layouts/rail" %>
+        <main class="main"><%= yield %></main>
+      </div>
+    </div>
   </body>
 </html>

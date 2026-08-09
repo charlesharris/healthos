@@ -1,264 +1,1381 @@
 /*
  * Healthos — a single hand-written stylesheet, no framework.
  *
- * Deliberately restrained. This is a provider tool where the content is
- * dense, mostly tabular, and read under time pressure; decoration competes
- * with the data. The job here is legibility and hierarchy, not personality.
+ * This is a provider workstation tool. The content is dense, mostly tabular,
+ * and read under time pressure by someone deciding what to look at next.
+ * Decoration competes with the data, so the budget goes to density, scanning
+ * rhythm and hierarchy rather than to personality.
  *
- * The one visual rule that carries product meaning: HO §84 says work reason
- * is primary and subject identity secondary. That is expressed in type
- * weight and colour rather than in layout, so it survives a table with many
- * columns.
+ * Two rules here carry product meaning rather than taste, and neither may be
+ * "improved" without reading the requirement first:
+ *
+ *   1. HO §84 — work reason is primary, subject identity is secondary. That
+ *      is expressed in type weight, size and colour so it survives however
+ *      many columns the row ends up carrying.
+ *
+ *   2. S2C-011 — review priority (operational urgency) and evidence strength
+ *      (statistical support) are independent axes. Priority is ordered with a
+ *      single-hue emphasis ramp, never a red→green severity ramp, because a
+ *      heat map reads as "how bad is this patient" rather than "how soon
+ *      should someone look". Evidence strength is rendered monochrome, as a
+ *      four-tick meter, for the same reason inverted: colouring support would
+ *      make weak evidence look safe and strong evidence look alarming, when
+ *      it says nothing at all about severity (see .meter).
+ *
+ * Light is the primary theme — this gets used in bright clinical rooms and on
+ * projected screens. Dark is fully supported through prefers-color-scheme;
+ * every colour below is a token so the dark block only restates values.
  */
 
+/* ======================================================================
+   Tokens
+   ====================================================================== */
+
 :root {
-  --bg: #fbfbfa;
+  /* Warm neutral ground. Pure white reads clinical-cold and flares under
+     overhead lighting; a hint of warmth sits better for long sessions. */
+  --bg: #f7f7f5;
   --surface: #ffffff;
-  --border: #e2e0dc;
-  --border-strong: #c9c6c0;
-  --text: #1c1b19;
-  --text-muted: #6b6862;
-  --text-faint: #9a968e;
+  --surface-sunken: #f2f1ee;
+  --surface-raised: #ffffff;
+
+  --border: #e4e2dd;
+  --border-strong: #cbc8c1;
+  --border-focus: #1f5c8b;
+
+  --text: #1b1a18;
+  --text-secondary: #55524c;
+  --text-muted: #7d7a73;
+  --text-faint: #a5a19a;
+
   --accent: #1f5c8b;
-  --accent-soft: #eaf1f7;
+  --accent-hover: #17486e;
+  --accent-soft: #e9f0f6;
+  --accent-softer: #f3f7fa;
+  --accent-border: #a9c6dd;
+
   --danger: #a8342a;
-  --danger-soft: #fbeceb;
+  --danger-soft: #fbecea;
+  --danger-border: #e3b3ad;
   --ok: #2f6b46;
-  --ok-soft: #ebf3ee;
+  --ok-soft: #eaf2ed;
+  --ok-border: #a8c9b6;
   --warn: #8a5a11;
-  --warn-soft: #fbf2e2;
+  --warn-soft: #fbf3e4;
+  --warn-border: #ddc79a;
+
+  --shadow-sm: 0 1px 2px rgb(28 26 24 / 6%);
+  --shadow-md: 0 2px 4px rgb(28 26 24 / 6%), 0 8px 24px rgb(28 26 24 / 8%);
+  --shadow-lg: 0 4px 8px rgb(28 26 24 / 8%), 0 24px 64px rgb(28 26 24 / 14%);
+
+  --radius-sm: 4px;
   --radius: 6px;
-  --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+  --radius-lg: 10px;
+
+  --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+
+  --rail-w: 13rem;
+  --topbar-h: 3rem;
+  --drawer-w: min(46rem, 52vw);
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #17181a;
-    --surface: #1e2023;
-    --border: #32353a;
-    --border-strong: #464a51;
-    --text: #e8e6e3;
-    --text-muted: #a4a19b;
-    --text-faint: #74716b;
+    --bg: #131416;
+    --surface: #1b1d20;
+    --surface-sunken: #17181a;
+    --surface-raised: #212428;
+
+    --border: #2e3136;
+    --border-strong: #43474e;
+    --border-focus: #7fb3d9;
+
+    --text: #eae8e5;
+    --text-secondary: #b6b2ac;
+    --text-muted: #8d8981;
+    --text-faint: #6a675f;
+
     --accent: #7fb3d9;
-    --accent-soft: #1c2c38;
+    --accent-hover: #9cc6e5;
+    --accent-soft: #1a2a37;
+    --accent-softer: #171f27;
+    --accent-border: #2f4a5f;
+
     --danger: #e2867c;
-    --danger-soft: #33201e;
+    --danger-soft: #2e1c1a;
+    --danger-border: #5a332e;
     --ok: #86c39d;
-    --ok-soft: #1c2b22;
+    --ok-soft: #1a2921;
+    --ok-border: #2f4a3a;
     --warn: #d9ab63;
-    --warn-soft: #302719;
+    --warn-soft: #2b2317;
+    --warn-border: #4d3f24;
+
+    --shadow-sm: 0 1px 2px rgb(0 0 0 / 40%);
+    --shadow-md: 0 2px 4px rgb(0 0 0 / 40%), 0 8px 24px rgb(0 0 0 / 45%);
+    --shadow-lg: 0 4px 8px rgb(0 0 0 / 45%), 0 24px 64px rgb(0 0 0 / 60%);
   }
 }
 
-* { box-sizing: border-box; }
+/* ======================================================================
+   Base
+   ====================================================================== */
+
+*, *::before, *::after { box-sizing: border-box; }
+
+/*
+ * The `hidden` attribute must win. Several rules below set `display` on
+ * element selectors (input[type=submit], for one), which outranks the user
+ * agent's `[hidden] { display: none }` and silently leaves elements on screen
+ * that JavaScript believes it has hidden.
+ */
+[hidden] { display: none !important; }
+
+html { -webkit-text-size-adjust: 100%; }
 
 body {
   margin: 0;
-  padding: 2rem 2.5rem 4rem;
   background: var(--bg);
   color: var(--text);
-  font: 15px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif;
+  font: 14px/1.5 var(--sans);
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
-h1 { font-size: 1.4rem; font-weight: 600; margin: 0 0 0.35rem; letter-spacing: -0.01em; }
-h2 { font-size: 1.05rem; font-weight: 600; margin: 2rem 0 0.6rem; }
-h3 { font-size: 0.95rem; font-weight: 600; margin: 1.2rem 0 0.4rem; }
-p  { margin: 0.4rem 0; }
-a  { color: var(--accent); text-decoration: none; }
-a:hover { text-decoration: underline; }
+h1, h2, h3, h4 { margin: 0; font-weight: 600; letter-spacing: -0.011em; }
+h1 { font-size: 1.25rem; }
+h2 { font-size: 1rem; }
+h3 { font-size: 0.875rem; }
+p { margin: 0 0 0.6rem; }
+p:last-child { margin-bottom: 0; }
+ul, ol { margin: 0 0 0.6rem; padding-left: 1.15rem; }
 
-code, pre, .mono { font-family: var(--mono); font-size: 0.85em; }
+a { color: var(--accent); text-decoration: none; }
+a:hover { color: var(--accent-hover); text-decoration: underline; }
+
+:focus-visible {
+  outline: 2px solid var(--border-focus);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+code, pre, .mono { font-family: var(--mono); }
+
 pre {
-  background: var(--surface);
+  background: var(--surface-sunken);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  padding: 0.85rem 1rem;
+  padding: 0.75rem 0.9rem;
   overflow-x: auto;
+  font-size: 0.75rem;
+  line-height: 1.5;
+  margin: 0;
 }
 
-/* ---- Tables: the queue and every evidence listing ---------------------- */
+hr { border: 0; border-top: 1px solid var(--border); margin: 1rem 0; }
 
-table {
+/* Numbers that sit in columns must not dance as they change. */
+.tnum, time, .age, .meter-label { font-variant-numeric: tabular-nums; }
+
+.mono { font-size: 0.8125rem; letter-spacing: -0.01em; }
+.muted { color: var(--text-muted); }
+.secondary { color: var(--text-secondary); }
+.faint { color: var(--text-faint); }
+.small { font-size: 0.8125rem; }
+.tiny { font-size: 0.75rem; }
+.nowrap { white-space: nowrap; }
+.truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.stack > * + * { margin-top: 1rem; }
+.row { display: flex; align-items: center; gap: 0.5rem; }
+.row-wrap { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
+.spacer { flex: 1; }
+.visually-hidden {
+  position: absolute; width: 1px; height: 1px; overflow: hidden;
+  clip-path: inset(50%); white-space: nowrap;
+}
+
+/*
+ * An absent analytical value is information, not an empty cell (HO §84).
+ * "Nothing has been computed yet" and "computed, and the answer is none" are
+ * different states and must not render identically.
+ */
+.nodata { color: var(--text-faint); }
+.nodata::after { content: "—"; }
+
+/* ======================================================================
+   Application shell
+   ====================================================================== */
+
+.shell { min-height: 100vh; display: flex; flex-direction: column; }
+
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  height: var(--topbar-h);
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0 0.75rem 0 1rem;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-weight: 600;
+  font-size: 0.875rem;
+  letter-spacing: -0.01em;
+  color: var(--text);
+}
+.brand:hover { text-decoration: none; color: var(--text); }
+.brand-mark {
+  width: 1.125rem;
+  height: 1.125rem;
+  border-radius: 3px;
+  background: var(--accent);
+  display: inline-block;
+  position: relative;
+  flex: none;
+}
+/* A pulse trace, not a heart or a cross — this is telemetry, not a clinic. */
+.brand-mark::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: no-repeat center / 0.75rem
+    url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 10"><path d="M0 5h6l2-4 3 8 2.5-4H24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>');
+}
+
+.topbar-sep { color: var(--text-faint); font-size: 0.875rem; }
+.topbar-org { font-size: 0.8125rem; color: var(--text-secondary); font-weight: 500; }
+
+.shell-body { flex: 1; display: flex; align-items: stretch; min-height: 0; }
+
+.rail {
+  flex: none;
+  width: var(--rail-w);
+  border-right: 1px solid var(--border);
+  background: var(--surface-sunken);
+  padding: 0.75rem 0.5rem;
+  position: sticky;
+  top: var(--topbar-h);
+  align-self: stretch;
+  min-height: calc(100vh - var(--topbar-h));
+  max-height: calc(100vh - var(--topbar-h));
+  overflow-y: auto;
+}
+
+.rail-label {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  padding: 0.6rem 0.55rem 0.3rem;
+}
+
+.rail-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.35rem 0.55rem;
+  border-radius: var(--radius-sm);
+  font-size: 0.8125rem;
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+.rail-item:hover { background: var(--surface); color: var(--text); text-decoration: none; }
+.rail-item.is-active {
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 600;
+}
+.rail-item .count {
+  margin-left: auto;
+  font-size: 0.75rem;
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+}
+.rail-item.is-active .count { color: var(--accent); }
+
+.main {
+  flex: 1;
+  min-width: 0;
+  padding: 1.25rem 1.5rem 4rem;
+}
+.main-narrow { max-width: 58rem; }
+
+/* ======================================================================
+   Menus (org switcher, user menu)
+   ====================================================================== */
+
+.menu { position: relative; }
+
+.menu-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font: inherit;
+  font-size: 0.8125rem;
+  color: var(--text-secondary);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  padding: 0.25rem 0.5rem;
+  cursor: pointer;
+}
+.menu-trigger:hover { background: var(--surface-sunken); color: var(--text); }
+.menu-trigger[aria-expanded="true"] { background: var(--surface-sunken); color: var(--text); }
+.menu-trigger::after {
+  content: "";
+  width: 0; height: 0;
+  border-left: 3.5px solid transparent;
+  border-right: 3.5px solid transparent;
+  border-top: 4px solid currentColor;
+  opacity: 0.55;
+}
+
+.avatar {
+  width: 1.375rem;
+  height: 1.375rem;
+  border-radius: 50%;
+  background: var(--accent-soft);
+  color: var(--accent);
+  border: 1px solid var(--accent-border);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.625rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  flex: none;
+}
+
+.menu-panel {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 0.35rem);
+  min-width: 14rem;
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-md);
+  padding: 0.3rem;
+  z-index: 40;
+}
+.menu-panel[hidden] { display: none; }
+.menu-panel .menu-head {
+  padding: 0.4rem 0.55rem 0.5rem;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 0.3rem;
+}
+.menu-panel .menu-head strong { display: block; font-size: 0.8125rem; font-weight: 600; }
+.menu-panel .menu-head span { font-size: 0.75rem; color: var(--text-muted); }
+
+.menu-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
   width: 100%;
-  border-collapse: collapse;
-  margin: 0.75rem 0 1.25rem;
+  text-align: left;
+  font: inherit;
+  font-size: 0.8125rem;
+  color: var(--text-secondary);
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-sm);
+  padding: 0.4rem 0.55rem;
+  cursor: pointer;
+}
+.menu-item:hover { background: var(--surface-sunken); color: var(--text); text-decoration: none; }
+.menu-item.is-current { color: var(--accent); font-weight: 600; }
+.menu-item.is-current::after { content: "✓"; margin-left: auto; font-size: 0.75rem; }
+.menu-form { margin: 0; }
+.menu-sep { height: 1px; background: var(--border); margin: 0.3rem 0; }
+
+/* ======================================================================
+   Page furniture
+   ====================================================================== */
+
+.page-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 1rem;
+  margin-bottom: 0.9rem;
+}
+.page-head .page-actions { margin-left: auto; display: flex; gap: 0.5rem; align-items: center; }
+.page-sub { font-size: 0.8125rem; color: var(--text-muted); margin-top: 0.15rem; }
+
+.breadcrumb {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+  margin-bottom: 0.5rem;
+}
+.breadcrumb a { color: var(--text-muted); }
+.breadcrumb a:hover { color: var(--accent); }
+
+.card {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+}
+.card-head {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.6rem 0.85rem;
+  border-bottom: 1px solid var(--border);
+}
+.card-head h2, .card-head h3 { font-size: 0.8125rem; }
+.card-body { padding: 0.85rem; }
+
+.section { margin-bottom: 1.25rem; }
+.section-title {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 0.5rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.section-title::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+
+.empty-state {
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius);
+  padding: 2.5rem 1.5rem;
+  text-align: center;
+  color: var(--text-muted);
+  background: var(--surface);
+}
+.empty-state strong { display: block; color: var(--text); font-size: 0.9375rem; margin-bottom: 0.25rem; }
+
+/* ======================================================================
+   Buttons
+   ====================================================================== */
+
+.btn, input[type="submit"], button.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  font: inherit;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  line-height: 1.2;
+  white-space: nowrap;
+  cursor: pointer;
+  padding: 0.4rem 0.7rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-strong);
+  background: var(--surface);
+  color: var(--text);
+  transition: background-color 80ms linear, border-color 80ms linear;
+}
+.btn:hover, input[type="submit"]:hover {
+  background: var(--surface-sunken);
+  border-color: var(--text-faint);
+  text-decoration: none;
+  color: var(--text);
+}
+.btn:disabled, input[type="submit"]:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.btn-primary, input[type="submit"].btn-primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+.btn-primary:hover, input[type="submit"].btn-primary:hover {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+  color: #fff;
+}
+@media (prefers-color-scheme: dark) {
+  .btn-primary, input[type="submit"].btn-primary { color: #10151a; }
+  .btn-primary:hover, input[type="submit"].btn-primary:hover { color: #10151a; }
+}
+
+.btn-ghost {
+  background: transparent;
+  border-color: transparent;
+  color: var(--text-secondary);
+}
+.btn-ghost:hover { background: var(--surface-sunken); border-color: transparent; }
+
+.btn-danger { color: var(--danger); border-color: var(--danger-border); background: var(--surface); }
+.btn-danger:hover { background: var(--danger-soft); border-color: var(--danger); color: var(--danger); }
+
+.btn-sm { padding: 0.2rem 0.45rem; font-size: 0.75rem; }
+.btn-block { width: 100%; }
+
+.btn-link {
+  background: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  color: var(--accent);
+  cursor: pointer;
+}
+.btn-link:hover { text-decoration: underline; background: none; }
+
+/* ======================================================================
+   Forms
+   ====================================================================== */
+
+.input, .select,
+input[type="text"], input[type="email"], input[type="password"],
+input[type="search"], input[type="number"], select, textarea {
+  font: inherit;
+  font-size: 0.8125rem;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  padding: 0.35rem 0.5rem;
+  width: 100%;
+  max-width: 24rem;
+}
+
+select {
+  appearance: none;
+  padding-right: 1.6rem;
+  background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 6"><path d="M1 1l4 4 4-4" fill="none" stroke="%237d7a73" stroke-width="1.5" stroke-linecap="round"/></svg>');
+  background-repeat: no-repeat;
+  background-position: right 0.5rem center;
+  background-size: 0.55rem;
+}
+@media (prefers-color-scheme: dark) {
+  select {
+    background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 6"><path d="M1 1l4 4 4-4" fill="none" stroke="%238d8981" stroke-width="1.5" stroke-linecap="round"/></svg>');
+  }
+}
+
+input:focus, select:focus, textarea:focus {
+  outline: 2px solid var(--border-focus);
+  outline-offset: -1px;
+  border-color: var(--border-focus);
+}
+
+.field { margin-bottom: 0.75rem; }
+.field > label, .field-label {
+  display: block;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin-bottom: 0.2rem;
+}
+.field-hint { font-size: 0.75rem; color: var(--text-muted); margin-top: 0.2rem; }
+
+.field-inline { display: flex; align-items: center; gap: 0.4rem; }
+.field-inline > label { margin: 0; white-space: nowrap; }
+
+/* ======================================================================
+   Chips
+   ====================================================================== */
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  line-height: 1.35;
+  padding: 0.1rem 0.4rem;
+  border-radius: 3px;
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  background: var(--surface-sunken);
+  white-space: nowrap;
+}
+.chip-mono { font-family: var(--mono); font-weight: 500; letter-spacing: 0; }
+
+/*
+ * Review priority (S2C-011). Deliberately NOT a red→green severity ramp:
+ * operational urgency is not clinical severity, and a heat map would read as
+ * "how bad is this patient". Ordering is carried by emphasis within a single
+ * hue — filled, outlined, neutral, recessive — which sorts visually without
+ * ever implying danger.
+ */
+.chip-priority-now {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+@media (prefers-color-scheme: dark) {
+  .chip-priority-now { color: #10151a; }
+}
+.chip-priority-today {
+  background: var(--accent-soft);
+  border-color: var(--accent-border);
+  color: var(--accent);
+}
+.chip-priority-routine {
+  background: var(--surface-sunken);
+  border-color: var(--border);
+  color: var(--text-secondary);
+}
+.chip-priority-watch {
+  background: transparent;
+  border-color: var(--border);
+  color: var(--text-faint);
+}
+
+/* Case status. Neutral by default; only terminal states get a tint, because
+   "this is finished" is the one status worth spotting from across the row. */
+.chip-status-new { background: var(--surface); border-color: var(--border-strong); color: var(--text); }
+.chip-status-resolved { background: var(--ok-soft); border-color: var(--ok-border); color: var(--ok); }
+.chip-status-dismissed { background: var(--surface-sunken); border-color: var(--border); color: var(--text-faint); }
+
+/*
+ * Analysis state (S2C-019). `failed` and `insufficient_evidence` must never
+ * look alike: one means the analysis broke and somebody should look, the
+ * other means the analysis ran and honestly reported that the data does not
+ * support a conclusion (STAT-036) — a successful outcome. So failure is
+ * tinted as a problem and insufficient evidence is rendered as an ordinary,
+ * unalarming result.
+ */
+.chip-analysis-failed { background: var(--danger-soft); border-color: var(--danger-border); color: var(--danger); }
+.chip-analysis-insufficient_evidence { background: var(--surface-sunken); border-color: var(--border); color: var(--text-secondary); }
+.chip-analysis-current { background: var(--ok-soft); border-color: var(--ok-border); color: var(--ok); }
+/* Stale is not a failure — late data arrived and new artifacts are being
+   built (STAT-040) — but the snapshot on screen is superseded, and that is
+   worth noticing. */
+.chip-analysis-stale { background: var(--warn-soft); border-color: var(--warn-border); color: var(--warn); }
+.chip-analysis-not_started, .chip-analysis-pending {
+  background: var(--surface-sunken); border-color: var(--border); color: var(--text-muted);
+}
+
+/*
+ * Evidence strength (insufficient | weak | moderate | strong) as a monochrome
+ * four-tick meter.
+ *
+ * Colour is deliberately withheld. Evidence strength is support that a
+ * dimension differs — NOT severity, causality or importance (CLAUDE.md
+ * vocabulary). A red-for-strong ramp would read as "this patient is worse",
+ * which is precisely the inference the contract forbids, and a green-for-weak
+ * ramp would read as reassurance. Ink density orders the four levels without
+ * asserting anything about how alarming they are.
+ */
+.meter { display: inline-flex; align-items: center; gap: 0.3rem; }
+.meter-ticks { display: inline-flex; gap: 1.5px; }
+.meter-tick {
+  width: 4px;
+  height: 11px;
+  border-radius: 1px;
+  background: var(--border);
+}
+.meter-tick.is-on { background: var(--text-secondary); }
+.meter-label { font-size: 0.6875rem; color: var(--text-secondary); text-transform: capitalize; }
+
+/* ======================================================================
+   Flash
+   ====================================================================== */
+
+.flash {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  border-radius: var(--radius);
+  padding: 0.5rem 0.7rem;
+  margin-bottom: 0.75rem;
+  font-size: 0.8125rem;
+  border: 1px solid transparent;
+}
+.flash-alert { background: var(--danger-soft); color: var(--danger); border-color: var(--danger-border); }
+.flash-notice { background: var(--ok-soft); color: var(--ok); border-color: var(--ok-border); }
+
+/* ======================================================================
+   Tabs
+   ====================================================================== */
+
+.tabs {
+  display: flex;
+  align-items: center;
+  gap: 0.15rem;
+  flex-wrap: wrap;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 0.75rem;
+}
+.tab {
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+  padding: 0.4rem 0.6rem;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+  white-space: nowrap;
+}
+.tab:hover { color: var(--text); background: var(--surface-sunken); text-decoration: none; }
+.tab.is-active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+  font-weight: 600;
+  background: transparent;
+}
+/* A tab whose count is zero is still worth showing — it answers "is there
+   any?" — but it should not compete with tabs that have work in them. */
+.tab.is-empty:not(.is-active) { color: var(--text-faint); }
+
+/* ======================================================================
+   Filter bar
+   ====================================================================== */
+
+.filterbar {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+  padding: 0.4rem 0.5rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  margin-bottom: 0.5rem;
+}
+.filter { display: inline-flex; align-items: center; gap: 0.3rem; }
+.filter > label {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  margin: 0;
+  font-weight: 500;
+  white-space: nowrap;
+}
+.filter select {
+  width: auto;
+  min-width: 6rem;
+  max-width: 12rem;
+  font-size: 0.75rem;
+  padding: 0.2rem 1.4rem 0.2rem 0.4rem;
+  background-color: var(--surface-sunken);
+  border-color: var(--border);
+}
+.filter select:hover { border-color: var(--border-strong); }
+/* A filter that is actually narrowing the queue should be visible as such. */
+.filter.is-set select {
+  border-color: var(--accent-border);
+  background-color: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 600;
+}
+.filterbar-divider { width: 1px; align-self: stretch; background: var(--border); margin: 0 0.2rem; }
+
+/*
+ * S2C-023: the sort is stated in words on the page. An operator who disagrees
+ * with the order can read why it is that order — which is the whole
+ * difference between a queue and a black box.
+ */
+.sort-explanation {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  margin-bottom: 0.75rem;
+  padding-left: 0.15rem;
+}
+
+/* ======================================================================
+   The queue
+   ====================================================================== */
+
+.queue-wrap { container-type: inline-size; }
+
+.queue {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
   overflow: hidden;
 }
 
-th {
-  text-align: left;
-  font-size: 0.72rem;
+.qhead, .qrow {
+  display: grid;
+  grid-template-columns:
+    [rail] 3px
+    [priority] 4.75rem
+    [reason] minmax(11rem, 1fr)
+    [status] 5.5rem
+    [age] 3.75rem
+    [owner] 8rem
+    [analysis] 8.5rem
+    [quality] 7.5rem;
+  align-items: center;
+  column-gap: 0.6rem;
+  padding-right: 0.7rem;
+}
+
+.qhead {
+  font-size: 0.6875rem;
   font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--text-muted);
-  padding: 0.6rem 0.85rem;
+  background: var(--surface-sunken);
   border-bottom: 1px solid var(--border);
+  padding-top: 0.4rem;
+  padding-bottom: 0.4rem;
+}
+
+.qrow {
+  border-bottom: 1px solid var(--border);
+  padding-top: 0.5rem;
+  padding-bottom: 0.5rem;
+  min-height: 3.25rem;
+  position: relative;
+}
+.queue .qrow:last-child { border-bottom: 0; }
+.qrow:hover { background: var(--accent-softer); }
+.qrow:focus-within { background: var(--accent-softer); }
+
+/* The row rail restates review priority as position and weight, so the queue
+   is scannable without reading the chip in every row. Same single-hue ramp
+   as .chip-priority-* — never a severity gradient. */
+.qrail { grid-column: rail; align-self: stretch; border-radius: 0 2px 2px 0; }
+.qrail-now { background: var(--accent); }
+.qrail-today { background: var(--accent-border); }
+.qrail-routine { background: transparent; }
+.qrail-watch { background: transparent; }
+
+.qcell { min-width: 0; }
+.qcell-priority { grid-column: priority; padding-left: 0.75rem; }
+.qcell-reason { grid-column: reason; }
+.qcell-status { grid-column: status; }
+.qcell-age { grid-column: age; }
+.qcell-owner { grid-column: owner; }
+.qcell-analysis { grid-column: analysis; }
+.qcell-quality { grid-column: quality; }
+
+/*
+ * Row actions float over the right-hand columns on hover rather than owning a
+ * column of their own. An assign select plus two buttons needs ~19rem; giving
+ * that permanently to controls that are only wanted on one row at a time cost
+ * more than every analytical column put together.
+ */
+.qcell-actions {
+  position: absolute;
+  right: 0.7rem;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+/* HO §84: work reason primary, subject identity secondary. Weight and size
+   carry it, so it survives whatever the column set becomes. */
+.reason-title {
+  display: block;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text);
+  line-height: 1.3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.reason-title:hover { color: var(--accent); text-decoration: none; }
+.qrow:hover .reason-title { color: var(--accent); }
+
+.reason-sub {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  margin-top: 0.1rem;
+  overflow: hidden;
+}
+.reason-sub .sep { color: var(--text-faint); }
+.reason-sub .handle {
+  font-family: var(--mono);
+  font-size: 0.6875rem;
+  color: var(--text-muted);
+  max-width: 12rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-td {
-  padding: 0.7rem 0.85rem;
-  border-bottom: 1px solid var(--border);
-  vertical-align: top;
-}
+.age { font-size: 0.8125rem; color: var(--text-secondary); }
+.age-sub { display: block; font-size: 0.6875rem; color: var(--text-faint); }
 
-tbody tr:last-child td { border-bottom: none; }
-tbody tr:hover { background: var(--accent-soft); }
+.owner { font-size: 0.8125rem; color: var(--text-secondary); }
+.owner-sub { display: block; font-size: 0.6875rem; color: var(--text-faint); }
+.owner-none { color: var(--text-faint); font-style: italic; }
 
-/* HO §84: work reason primary, subject identity secondary. */
-td strong { font-weight: 600; }
-td .subject-handle,
-td code { color: var(--text-muted); font-size: 0.82rem; }
+.analysis-stack { display: flex; flex-direction: column; gap: 0.2rem; align-items: flex-start; }
 
-/* Key/value tables (provenance, evidence inspector) read better narrow. */
-table.detail th { width: 15rem; text-transform: none; letter-spacing: 0; font-size: 0.82rem; }
-
-/* ---- Forms -------------------------------------------------------------- */
-
-input[type="text"], input[type="email"], input[type="password"],
-input[type="search"], select, textarea {
-  font: inherit;
-  color: var(--text);
-  background: var(--surface);
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius);
-  padding: 0.5rem 0.65rem;
-  width: 100%;
-  max-width: 26rem;
-}
-
-input:focus, select:focus, textarea:focus {
-  outline: 2px solid var(--accent);
-  outline-offset: 1px;
-  border-color: var(--accent);
-}
-
-label { display: block; font-size: 0.8rem; font-weight: 600; color: var(--text-muted); margin-bottom: 0.25rem; }
-
-input[type="submit"], button, .button {
-  font: inherit;
-  font-weight: 500;
-  cursor: pointer;
-  background: var(--accent);
-  color: #fff;
-  border: 1px solid transparent;
-  border-radius: var(--radius);
-  padding: 0.45rem 0.9rem;
-  width: auto;
-}
-
-input[type="submit"]:hover, button:hover { filter: brightness(1.08); }
-
-/* Secondary actions sit inside dense rows; they must not shout. */
-td button, td input[type="submit"] {
-  background: var(--surface);
-  color: var(--accent);
-  border-color: var(--border-strong);
-  padding: 0.3rem 0.6rem;
-  font-size: 0.85rem;
-}
-
-/* ---- Sign in ------------------------------------------------------------ */
-
-/*
- * The auth pages have no chrome of their own, so they are centred and given
- * a card. Everything else in the app is a working surface; this is the one
- * page that is a doorway.
- */
-body.auth, .auth-card {
-  max-width: 22rem;
-  margin: 12vh auto 0;
-}
-
-.auth-card {
+/* Row actions stay out of the way until the row is under the cursor or holds
+   focus. Twenty always-visible dropdowns is what made the old queue
+   unreadable; the actions are still keyboard reachable at all times. */
+.rowactions {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  opacity: 0;
+  /* Invisible controls must not eat clicks aimed at the row beneath them. */
+  pointer-events: none;
+  transition: opacity 60ms linear;
+  /* Solid, because it sits on top of the analysis columns while shown. */
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 1.75rem 1.6rem;
-}
-
-.auth-card h1 { font-size: 1.15rem; margin-bottom: 1rem; }
-.auth-card input { max-width: none; margin-bottom: 0.7rem; }
-.auth-card input[type="submit"] { width: 100%; margin-top: 0.3rem; }
-.auth-card .muted { font-size: 0.85rem; margin-top: 0.9rem; }
-
-/* ---- Flashes and status -------------------------------------------------- */
-
-.flash {
   border-radius: var(--radius);
-  padding: 0.6rem 0.85rem;
-  margin-bottom: 1rem;
-  font-size: 0.9rem;
-  border: 1px solid transparent;
+  box-shadow: var(--shadow-md);
+  padding: 0.2rem;
 }
-.flash-alert  { background: var(--danger-soft); color: var(--danger); border-color: var(--danger); }
-.flash-notice { background: var(--ok-soft); color: var(--ok); border-color: var(--ok); }
+.qrow:hover .rowactions,
+.qrow:focus-within .rowactions,
+.rowactions:focus-within { opacity: 1; pointer-events: auto; }
+@media (hover: none) { .rowactions { opacity: 1; pointer-events: auto; } }
+.rowactions form { margin: 0; display: inline-flex; }
+.rowactions select { width: auto; max-width: 6.5rem; font-size: 0.6875rem; padding: 0.15rem 1.2rem 0.15rem 0.35rem; }
+
+.qrow-closed .reason-title { color: var(--text-muted); font-weight: 500; }
 
 /*
- * Priority chips. Deliberately NOT a red-to-green severity ramp: S2C-011
- * keeps operational urgency separate from statistical evidence, and a
- * heat-map reads as "how bad is this patient" rather than "how soon should
- * someone look". Weight and a single accent carry the ordering instead.
+ * When the drawer is open the queue keeps only the columns that answer "which
+ * row am I on" — everything else is visible in the drawer itself, and a
+ * crushed twelve-column grid is worse than an honest three-column one.
  */
-.chip {
-  display: inline-block;
-  font-size: 0.72rem;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  padding: 0.15rem 0.45rem;
-  border-radius: 3px;
-  border: 1px solid var(--border-strong);
+@container (max-width: 74rem) {
+  .qhead, .qrow {
+    grid-template-columns:
+      [rail] 3px [priority] 4.5rem [reason] minmax(9rem, 1fr) [status] 5.5rem [age] 3.75rem;
+  }
+  .qcell-owner, .qcell-analysis, .qcell-quality, .qcell-actions { display: none; }
+}
+
+@container (max-width: 46rem) {
+  .qhead, .qrow {
+    grid-template-columns: [rail] 3px [priority] 4.5rem [reason] minmax(8rem, 1fr) [age] 3.75rem;
+  }
+  .qcell-status { display: none; }
+}
+
+.qrow.is-current { background: var(--accent-soft); }
+
+/* ======================================================================
+   Pagination
+   ====================================================================== */
+
+.pagination {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-top: 0.75rem;
+  font-size: 0.8125rem;
   color: var(--text-muted);
+}
+.pagination .pages { font-variant-numeric: tabular-nums; }
+
+/* ======================================================================
+   Drawer (Quick Review over the queue)
+   ====================================================================== */
+
+/*
+ * The drawer pushes rather than covers.
+ *
+ * Triage is a run of decisions across rows, so the queue has to stay readable
+ * and keyboard-navigable while a Case is open — covering it with an overlay
+ * would mean closing the panel to find out which row is next. The queue sheds
+ * columns to fit (see the container queries on .qrow) instead of being
+ * crushed or hidden.
+ *
+ * Below 60rem there is not enough width to push anything, so it becomes a
+ * conventional full-width overlay with a scrim.
+ */
+.drawer[hidden] { display: none; }
+
+.drawer-scrim { display: none; }
+
+.drawer-panel {
+  position: fixed;
+  top: var(--topbar-h);
+  right: 0;
+  bottom: 0;
+  width: var(--drawer-w);
+  background: var(--surface);
+  border-left: 1px solid var(--border);
+  box-shadow: var(--shadow-lg);
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  animation: slide-in 140ms cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+
+.main { transition: padding-right 140ms cubic-bezier(0.22, 0.61, 0.36, 1); }
+html.drawer-open .main { padding-right: calc(var(--drawer-w) + 1.5rem); }
+
+@keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes slide-in { from { transform: translateX(1.5rem); opacity: 0; } to { transform: none; opacity: 1; } }
+@media (prefers-reduced-motion: reduce) {
+  .drawer-scrim, .drawer-panel, .main { animation: none; transition: none; }
+}
+
+.drawer-panel > turbo-frame { display: flex; flex-direction: column; min-height: 0; flex: 1; }
+
+@media (max-width: 60rem) {
+  :root { --drawer-w: 100vw; }
+
+  html.drawer-open .main { padding-right: 1.5rem; }
+  .drawer-panel { top: 0; }
+  .drawer-scrim {
+    display: block;
+    position: fixed;
+    inset: 0;
+    background: rgb(20 19 17 / 22%);
+    z-index: 45;
+    animation: fade-in 120ms ease-out;
+  }
+}
+@media (max-width: 60rem) and (prefers-color-scheme: dark) {
+  .drawer-scrim { background: rgb(0 0 0 / 45%); }
+}
+
+/* ======================================================================
+   Review (Quick Review — drawer body and full page share this)
+   ====================================================================== */
+
+/* Full page by default; the drawer variant adds its own scroll container so
+   the header stays pinned while the evidence scrolls under it. */
+.review-head { padding-bottom: 0.75rem; border-bottom: 1px solid var(--border); margin-bottom: 1rem; }
+.review-head .row-wrap { margin-bottom: 0.35rem; }
+.review-title { font-size: 1.125rem; font-weight: 600; line-height: 1.3; }
+.review-handle {
+  font-family: var(--mono);
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  margin-top: 0.2rem;
+  display: block;
+}
+
+.review-drawer { display: flex; flex-direction: column; min-height: 0; flex: 1; }
+.review-drawer .review-head {
+  flex: none;
+  padding: 0.85rem 1rem 0.7rem;
+  margin-bottom: 0;
   background: var(--surface);
 }
-.chip-now, .chip-today { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
-.chip-watch { color: var(--text-faint); }
+.review-drawer .review-title { font-size: 1rem; }
+.review-drawer .review-body { flex: 1; overflow-y: auto; padding: 0.9rem 1rem 2.5rem; min-height: 0; }
 
-.muted { color: var(--text-muted); }
-.faint { color: var(--text-faint); }
+.drawer-close {
+  margin-left: auto;
+  width: 1.6rem;
+  height: 1.6rem;
+  padding: 0;
+  border-radius: var(--radius-sm);
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 1rem;
+  line-height: 1;
+  cursor: pointer;
+  flex: none;
+}
+.drawer-close:hover { background: var(--surface-sunken); color: var(--text); }
 
-/* An absent analytical value is information, not an empty cell (HO §84). */
-.empty::after { content: "—"; color: var(--text-faint); }
+/*
+ * Full-page Quick Review: evidence top-left, timeline below it, metadata and
+ * actions in a sticky rail down the right.
+ *
+ * The three regions are explicitly placed rather than left to source order,
+ * because the drawer needs a different order from the page and both come from
+ * one partial. Stacked in a narrow panel the sequence has to be evidence →
+ * what can I do → history; source order alone would put the timeline in the
+ * middle, and a Case with two hundred observations would bury every action
+ * button under it.
+ */
+.review-columns {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 20rem;
+  grid-template-rows: auto auto;
+  gap: 1.5rem;
+  align-items: start;
+}
+.review-main { grid-column: 1; grid-row: 1; }
+.review-rail { grid-column: 2; grid-row: 1 / span 2; position: sticky; top: calc(var(--topbar-h) + 1rem); }
+.review-history { grid-column: 1; grid-row: 2; }
 
-/* ---- Layout scaffolding -------------------------------------------------- */
+/* align-items: stretch is not decoration here — the grid rule above sets
+   `start`, which in a flex column collapses every section to its content
+   width instead of the panel's. */
+@media (max-width: 70rem) {
+  .review-columns { display: flex; flex-direction: column; align-items: stretch; gap: 1.25rem; }
+  .review-rail { position: static; }
+}
 
-.page-header {
+.review-drawer .review-columns {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 1.25rem;
+}
+.review-drawer .review-rail { position: static; }
+
+/*
+ * Compact fact grid. The old page used a <dl>, which renders every label at
+ * body weight with the value indented below it — fourteen fields became
+ * thirteen hundred pixels and pushed the actual evidence below the fold.
+ */
+.facts {
+  display: grid;
+  grid-template-columns: 7.5rem minmax(0, 1fr);
+  gap: 0.3rem 0.75rem;
+  margin: 0;
+  font-size: 0.8125rem;
+}
+.facts dt { color: var(--text-muted); font-size: 0.75rem; padding-top: 0.05rem; }
+.facts dd { margin: 0; color: var(--text); min-width: 0; overflow-wrap: anywhere; }
+
+.attrs {
+  display: grid;
+  grid-template-columns: minmax(6rem, auto) minmax(0, 1fr);
+  gap: 0.2rem 0.75rem;
+  margin: 0;
+  font-size: 0.75rem;
+}
+.attrs dt { color: var(--text-muted); }
+.attrs dd { margin: 0; font-family: var(--mono); font-size: 0.6875rem; overflow-wrap: anywhere; }
+
+.signal {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  padding: 0.7rem 0.8rem;
+  margin-bottom: 0.6rem;
+}
+.signal-head {
   display: flex;
   align-items: baseline;
-  justify-content: space-between;
-  gap: 1rem;
-  border-bottom: 1px solid var(--border);
-  padding-bottom: 0.8rem;
-  margin-bottom: 1.2rem;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.5rem;
+}
+.signal-head h3 { font-size: 0.8125rem; }
+.signal-provenance {
+  font-size: 0.6875rem;
+  color: var(--text-faint);
+  font-family: var(--mono);
+  margin-top: 0.5rem;
+  padding-top: 0.45rem;
+  border-top: 1px dashed var(--border);
 }
 
-.tabs { display: flex; gap: 0.4rem; flex-wrap: wrap; margin-bottom: 1rem; }
-.tabs a {
-  font-size: 0.85rem;
-  padding: 0.3rem 0.7rem;
-  border: 1px solid var(--border);
-  border-radius: 999px;
+.reason-list { list-style: none; padding: 0; margin: 0.15rem 0 0; }
+.reason-list li { font-size: 0.75rem; color: var(--text-secondary); margin-bottom: 0.15rem; }
+.reason-code {
+  font-family: var(--mono);
+  font-size: 0.6875rem;
   color: var(--text-muted);
-  background: var(--surface);
+  background: var(--surface-sunken);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 0 0.25rem;
 }
-.tabs a.active { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); font-weight: 600; }
 
-.filters { display: flex; gap: 0.75rem; align-items: flex-end; flex-wrap: wrap; margin-bottom: 1rem; }
-.filters select, .filters input { max-width: 12rem; }
-
-.timeline { list-style: none; padding: 0; margin: 0.5rem 0; }
+/* Timeline (HO §90). Append-only, newest last, one axis. */
+.timeline { list-style: none; padding: 0; margin: 0; }
 .timeline li {
+  display: grid;
+  grid-template-columns: 4.5rem minmax(0, 1fr);
+  gap: 0.75rem;
+  padding: 0.35rem 0 0.35rem 0.75rem;
   border-left: 2px solid var(--border);
-  padding: 0.4rem 0 0.4rem 0.9rem;
-  margin-left: 0.3rem;
+  position: relative;
+  font-size: 0.8125rem;
 }
-.timeline .at { font-size: 0.78rem; color: var(--text-faint); font-family: var(--mono); }
+.timeline li::before {
+  content: "";
+  position: absolute;
+  left: -4px;
+  top: 0.75rem;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--border-strong);
+}
+.timeline li:hover::before { background: var(--accent); }
+.timeline .at {
+  font-family: var(--mono);
+  font-size: 0.6875rem;
+  color: var(--text-faint);
+  padding-top: 0.15rem;
+  font-variant-numeric: tabular-nums;
+}
+.timeline .what { min-width: 0; }
+.timeline .kind {
+  display: block;
+  font-size: 0.6875rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.timeline .summary { display: block; }
+.timeline .detail {
+  display: block;
+  font-family: var(--mono);
+  font-size: 0.6875rem;
+  color: var(--text-faint);
+  overflow-wrap: anywhere;
+}
+.timeline .detail-key { color: var(--text-muted); }
+.timeline .detail .sep { color: var(--border-strong); }
 
-.stack > * + * { margin-top: 1rem; }
+.actions-group { margin-bottom: 0.9rem; }
+.actions-group form { margin: 0 0 0.35rem; }
+.actions-group .btn { width: 100%; }
+
+.action-form {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.6rem 0.7rem;
+  margin-bottom: 0.6rem;
+  background: var(--surface-sunken);
+}
+.action-form .field:last-of-type { margin-bottom: 0.6rem; }
+.action-form select, .action-form input[type="text"], .action-form input[type="number"] { max-width: none; }
+
+/* A closure is not an ordinary move — it demands a disposition (S2C-015) and
+   deserves visual weight to match. */
+.action-form-closing { border-color: var(--border-strong); background: var(--surface); }
+
+.note {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  background: var(--surface-sunken);
+  border-left: 2px solid var(--border-strong);
+  padding: 0.4rem 0.6rem;
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+}
+.note-warn { background: var(--danger-soft); border-left-color: var(--danger); color: var(--danger); }
+
+/* ======================================================================
+   Plain tables (members, invitations, provenance)
+   ====================================================================== */
+
+.table-wrap {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+}
+
+table.data {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8125rem;
+}
+table.data th {
+  text-align: left;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  padding: 0.5rem 0.75rem;
+  background: var(--surface-sunken);
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+table.data td {
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid var(--border);
+  vertical-align: middle;
+}
+table.data tbody tr:last-child td { border-bottom: 0; }
+table.data tbody tr:hover { background: var(--accent-softer); }
+
+/* Key/value listing — provenance, envelope metadata. */
+table.kv { width: 100%; border-collapse: collapse; font-size: 0.8125rem; }
+table.kv th {
+  text-align: left;
+  font-weight: 500;
+  color: var(--text-muted);
+  width: 12rem;
+  padding: 0.35rem 0.75rem 0.35rem 0;
+  vertical-align: top;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.75rem;
+}
+table.kv td {
+  padding: 0.35rem 0;
+  border-bottom: 1px solid var(--border);
+  overflow-wrap: anywhere;
+}
+table.kv tr:last-child th, table.kv tr:last-child td { border-bottom: 0; }
+
+/* ======================================================================
+   Doorway pages (sign in, choose organization, accept invitation)
+   ====================================================================== */
+
+.doorway {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem 1rem 4rem;
+}
+.doorway-inner { width: 100%; max-width: 21rem; }
+
+.doorway-brand {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  justify-content: center;
+  margin-bottom: 0.35rem;
+  font-size: 0.9375rem;
+  font-weight: 600;
+}
+.doorway-tagline {
+  text-align: center;
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+  margin-bottom: 1.25rem;
+}
+
+.doorway-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+  padding: 1.4rem 1.3rem;
+}
+.doorway-card h1 { font-size: 1rem; margin-bottom: 0.9rem; }
+.doorway-card .input,
+.doorway-card input[type="email"],
+.doorway-card input[type="password"] { max-width: none; padding: 0.45rem 0.6rem; }
+.doorway-card input[type="submit"] { width: 100%; margin-top: 0.4rem; }
+.doorway-foot { text-align: center; font-size: 0.8125rem; color: var(--text-muted); margin-top: 0.9rem; }
+
+.org-choice {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  width: 100%;
+  text-align: left;
+  padding: 0.6rem 0.7rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  cursor: pointer;
+  font: inherit;
+  color: var(--text);
+  margin-bottom: 0.4rem;
+}
+.org-choice:hover { border-color: var(--accent); background: var(--accent-softer); }
+.org-choice strong { font-size: 0.875rem; font-weight: 600; }
+.org-choice .role { margin-left: auto; font-size: 0.6875rem; color: var(--text-muted); }
+.org-choice-form { margin: 0; }

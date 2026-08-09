@@ -1,13 +1,40 @@
-<h1><%= Current.organization.name %> — members</h1>
-<table>
-  <thead><tr><th>Email</th><th>Role</th><th>Status</th></tr></thead>
-  <tbody>
-    <% @memberships.each do |membership| %>
-      <tr>
-        <td><%= membership.user.email_address %></td>
-        <td><%= membership.role.humanize %></td>
-        <td><%= membership.status %></td>
-      </tr>
-    <% end %>
-  </tbody>
-</table>
+<% content_for :title, "Members" %>
+
+<div class="page-head">
+  <div>
+    <h1>Members</h1>
+    <p class="page-sub"><%= pluralize(@memberships.size, "member") %> of <%= Current.organization.name %></p>
+  </div>
+  <div class="page-actions">
+    <%= link_to "Invite someone", invitations_path, class: "btn btn-sm" %>
+  </div>
+</div>
+
+<%= render "layouts/flash" %>
+
+<div class="table-wrap main-narrow">
+  <table class="data">
+    <thead>
+      <tr><th>Email</th><th>Role</th><th>Status</th></tr>
+    </thead>
+    <tbody>
+      <% @memberships.each do |membership| %>
+        <tr>
+          <td><%= membership.user.email_address %></td>
+          <td><%= membership.role.humanize %></td>
+          <td>
+            <span class="chip <%= "chip-status-resolved" if membership.active? %>">
+              <%= membership.status %>
+            </span>
+          </td>
+        </tr>
+      <% end %>
+    </tbody>
+  </table>
+</div>
+
+<%# HO §11: roles live on OrganizationMembership, never as a global field on
+    User — so this list is per-tenant by construction. %>
+<p class="tiny faint" style="margin-top:0.6rem">
+  Roles are per organization. The same person can hold a different role in another tenant.
+</p>

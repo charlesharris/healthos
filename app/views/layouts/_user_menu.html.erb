@@ -1,0 +1,22 @@
+<div class="menu" data-controller="menu">
+  <button type="button" class="menu-trigger" aria-expanded="false" aria-haspopup="true"
+          data-menu-target="trigger" data-action="menu#toggle">
+    <span class="avatar" aria-hidden="true"><%= user_initials(Current.user) %></span>
+    <span class="visually-hidden">Account</span>
+  </button>
+
+  <div class="menu-panel" role="menu" hidden data-menu-target="panel">
+    <div class="menu-head">
+      <strong><%= Current.user.email_address %></strong>
+      <span><%= Current.membership.role.humanize %> · <%= Current.organization.name %></span>
+    </div>
+
+    <%= link_to "Members", members_path, class: "menu-item" %>
+    <%= link_to "Invitations", invitations_path, class: "menu-item" %>
+
+    <div class="menu-sep" role="separator"></div>
+
+    <%= button_to "Sign out", session_path, method: :delete,
+                  form_class: "menu-form", class: "menu-item" %>
+  </div>
+</div>

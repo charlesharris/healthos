@@ -1,0 +1,6 @@
+<% if flash[:notice].present? %>
+  <div class="flash flash-notice" role="status" data-role="notice"><%= flash[:notice] %></div>
+<% end %>
+<% if flash[:alert].present? %>
+  <div class="flash flash-alert" role="alert" data-role="alert"><%= flash[:alert] %></div>
+<% end %>

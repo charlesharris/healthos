@@ -1,4 +1,4 @@
-<div id="queue_flash">
-  <% if flash[:notice].present? %><p data-role="notice"><%= flash[:notice] %></p><% end %>
-  <% if flash[:alert].present? %><p data-role="alert"><%= flash[:alert] %></p><% end %>
-</div>
+<%# Turbo-stream replaceable. Inline actions in the queue and the drawer swap
+    this whole element, so the id has to stay stable and unique on the page —
+    Quick Review's full-page rendering uses layouts/flash instead. %>
+<div id="queue_flash"><%= render "layouts/flash" %></div>

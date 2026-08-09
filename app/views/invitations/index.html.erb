@@ -1,23 +1,54 @@
-<h1>Invitations — <%= Current.organization.name %></h1>
-<% if flash[:notice] %><p><%= flash[:notice] %></p><% end %>
-<% if flash[:alert] %><p><%= flash[:alert] %></p><% end %>
+<% content_for :title, "Invitations" %>
 
-<%= form_with url: invitations_path, method: :post do |f| %>
-  <%= f.email_field :email_address, required: true, placeholder: "colleague@example.com" %>
-  <%= f.select :role, OrganizationMembership::ROLES.map { |r| [r.humanize, r] } %>
-  <%= f.submit "Invite" %>
-<% end %>
+<div class="page-head">
+  <div>
+    <h1>Invitations</h1>
+    <p class="page-sub">Membership in <%= Current.organization.name %> is invitation-based (HO §11).</p>
+  </div>
+</div>
 
-<table>
-  <thead><tr><th>Email</th><th>Role</th><th>Expires</th><th>Accepted</th></tr></thead>
-  <tbody>
-    <% @invitations.each do |invitation| %>
-      <tr>
-        <td><%= invitation.email_address %></td>
-        <td><%= invitation.role.humanize %></td>
-        <td><%= invitation.expires_at %></td>
-        <td><%= invitation.accepted_at || "—" %></td>
-      </tr>
-    <% end %>
-  </tbody>
-</table>
+<%= render "layouts/flash" %>
+
+<div class="main-narrow">
+  <%= form_with url: invitations_path, method: :post, class: "filterbar" do |f| %>
+    <div class="filter">
+      <%= f.label :email_address, "Email" %>
+      <%= f.email_field :email_address, required: true, placeholder: "colleague@example.com",
+                        style: "min-width:16rem" %>
+    </div>
+
+    <div class="filter">
+      <%= f.label :role, "Role" %>
+      <%= f.select :role, OrganizationMembership::ROLES.map { |r| [ r.humanize, r ] } %>
+    </div>
+
+    <%= f.submit "Invite", class: "btn btn-primary btn-sm" %>
+  <% end %>
+
+  <div class="table-wrap">
+    <table class="data">
+      <thead>
+        <tr><th>Email</th><th>Role</th><th>Expires</th><th>Accepted</th></tr>
+      </thead>
+      <tbody>
+        <% if @invitations.empty? %>
+          <tr><td colspan="4" class="muted">No invitations issued yet.</td></tr>
+        <% end %>
+        <% @invitations.each do |invitation| %>
+          <tr>
+            <td><%= invitation.email_address %></td>
+            <td><%= invitation.role.humanize %></td>
+            <td><%= timestamp(invitation.expires_at) %></td>
+            <td>
+              <% if invitation.accepted_at %>
+                <%= timestamp(invitation.accepted_at) %>
+              <% else %>
+                <span class="chip">pending</span>
+              <% end %>
+            </td>
+          </tr>
+        <% end %>
+      </tbody>
+    </table>
+  </div>
+</div>

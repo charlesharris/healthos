@@ -112,6 +112,51 @@ land), bulk clinical actions.
 
 ## Decision Log
 
+### 2026-08-09 — the queue and Quick Review were unusable as rendered
+
+Not a new requirement; the epic's own surfaces did not meet the
+requirements already written. The stylesheet from 001-02 defined
+`.tabs`, `.chip`, `.filters`, `.timeline` and `.page-header` and no view
+used any of them, so every page rendered as unstyled HTML inside a
+layout that was `<body><%= yield %></body>` — no navigation, no tenant
+context, no way to sign out.
+
+Three fixes were requirements rather than taste:
+
+**HO §84 was inverted.** Twelve equal columns gave "baseline maturity"
+the same visual budget as work reason, and three of them were `—`.
+Priority, work reason and subject handle now carry the weight; the empty
+analytical columns stay visible (nothing has been computed yet, and
+hiding that would make the queue look more analysed than it is) but no
+longer outrank the reason a Case exists.
+
+**S2C-011 needed to survive contact with colour.** Priority is ordered
+with a single-hue emphasis ramp — filled, outlined, neutral, recessive —
+explicitly not a red→green severity ramp, because a heat map reads as
+"how bad is this patient" rather than "how soon should someone look".
+Evidence strength is rendered as a **monochrome four-tick meter** for
+the mirror-image reason: it is support that a dimension differs, not
+severity, and a colour ramp on it would be read as one within a day.
+Both rules are written into `application.css` next to the rules
+themselves, since that is where the next person will be tempted.
+
+**S2C-019 was legible only to someone who already knew.** `failed` and
+`insufficient_evidence` now render differently by construction — failure
+tinted as a problem, insufficient evidence as an ordinary result — so
+STAT-036's honest answer cannot be mistaken for an incident.
+
+Quick Review became a panel over the queue rather than a navigation
+(HO §88: most Cases resolvable without the Workbench). It **pushes** the
+queue instead of covering it, so ↑/↓ still moves between Cases while one
+is open. `/ops/cases/:id` remains a real page — same action, same
+authorization, same `case.viewed` audit — and renders standalone when
+visited directly, which is what keeps the panel optional rather than
+load-bearing. `spec/ops/quick_review_drawer_spec.rb` holds that down.
+
+Deviation from the previous view comment: the queue no longer prints a
+literal `—` in three columns per row. "Not started" plus an empty
+evidence meter states the same fact and costs a third of the width.
+
 ### 2026-08-09 — the ground-truth spec needed no bucket (CI fix)
 
 The demo ground-truth spec passed locally and failed in CI: the seed

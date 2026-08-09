@@ -6,100 +6,151 @@
     S2C-023: the sort is stated in words on the page. An operator who
     disagrees with the order can read why it is that order — which is the
     whole difference between a queue and a black box. %>
-<h1>Ops Queue — <%= Current.organization.name %></h1>
+<% content_for :title, "Ops Queue" %>
+<% filters = request.query_parameters.except("page") %>
+<% active_total = @counts.slice(*Cases::CaseRecord::ACTIVE_STATUSES).values.sum %>
+
+<div class="page-head">
+  <div>
+    <h1>Ops Queue</h1>
+    <p class="page-sub">
+      <%= pluralize(active_total, "active Case") %> in <%= Current.organization.name %>
+    </p>
+  </div>
+</div>
 
 <%= render "ops/cases/flash" %>
 
-<% filters = request.query_parameters.except("page") %>
+<div data-controller="queue"
+     data-action="keydown@document->queue#navigate drawer:closed@document->queue#clearCurrent">
+  <%# Status tabs with counts (HO §87). Counts respect every filter except
+      status, so switching tabs keeps the filter set and the numbers describe
+      what you would actually see. %>
+  <nav class="tabs" aria-label="Case status">
+    <%= link_to "Active (#{active_total})",
+                ops_cases_path(filters.merge("status" => Ops::CasesController::ACTIVE_TAB)),
+                class: class_names("tab", "is-active" => @tab == Ops::CasesController::ACTIVE_TAB,
+                                          "is-empty" => active_total.zero?) %>
 
-<%# Status tabs with counts (HO §87). Counts respect every filter except
-    status, so switching tabs keeps the filter set and the numbers describe
-    what you would actually see. %>
-<nav>
-  <% active_total = @counts.slice(*Cases::CaseRecord::ACTIVE_STATUSES).values.sum %>
-  <%= link_to "Active (#{active_total})",
-              ops_cases_path(filters.merge("status" => Ops::CasesController::ACTIVE_TAB)) %>
-  <% Cases::CaseRecord::STATUSES.each do |status| %>
-    |
-    <%= link_to "#{status.humanize} (#{@counts.fetch(status, 0)})",
-                ops_cases_path(filters.merge("status" => status)) %>
-  <% end %>
-  |
-  <%= link_to "All (#{@counts.values.sum})",
-              ops_cases_path(filters.merge("status" => Ops::CasesController::ALL_TAB)) %>
-</nav>
-
-<p>Showing tab: <strong><%= @tab.humanize %></strong></p>
-
-<%= form_with url: ops_cases_path, method: :get do %>
-  <%= hidden_field_tag :status, @tab %>
-
-  <label>Priority
-    <%= select_tag :priority,
-                   options_for_select(Ops::CaseQuery::PRIORITY_ORDER, params[:priority]),
-                   include_blank: "any" %>
-  </label>
-
-  <label>Team
-    <%= select_tag :team,
-                   options_from_collection_for_select(assignment_options.teams, :id, :name, params[:team]) +
-                     options_for_select([ [ "unassigned", Ops::CaseQuery::UNASSIGNED ] ], params[:team]),
-                   include_blank: "any" %>
-  </label>
-
-  <label>Owner
-    <%= select_tag :owner,
-                   options_from_collection_for_select(assignment_options.owners, :id, :email_address, params[:owner]) +
-                     options_for_select([ [ "unassigned", Ops::CaseQuery::UNASSIGNED ], [ "me", "me" ] ], params[:owner]),
-                   include_blank: "any" %>
-  </label>
-
-  <label>Sort
-    <%= select_tag :sort,
-                   options_for_select(Ops::CaseQuery::SORTS.map { |key, s| [ s[:label], key ] }, @query.sort) %>
-  </label>
-
-  <%= submit_tag "Apply filters" %>
-  <%= link_to "Clear", ops_cases_path %>
-<% end %>
-
-<p><small>Order: <%= @query.sort_explanation %></small></p>
-
-<% if @cases.empty? %>
-  <p>Nothing in the queue.</p>
-<% else %>
-  <table>
-    <thead>
-      <tr>
-        <th>Work reason</th>
-        <th>Subject</th>
-        <th>Program</th>
-        <th>Review priority</th>
-        <th>Status</th>
-        <th>Age</th>
-        <th>Owner / team</th>
-        <th>Evidence strength</th>
-        <th>Data quality</th>
-        <th>Baseline maturity</th>
-        <th>Analysis</th>
-        <th>Actions</th>
-      </tr>
-    </thead>
-    <tbody>
-      <%= render partial: "ops/cases/case_row", collection: @cases, as: :case_record %>
-    </tbody>
-  </table>
-
-  <%# Pagination. Offset paging is honest about what it is; HO §86 says to
-      query the normalized tables directly until measurement says otherwise,
-      and not to preemptively build a read model. %>
-  <nav>
-    <% if @query.page > 1 %>
-      <%= link_to "← Previous", ops_cases_path(filters.merge("page" => @query.page - 1)) %>
+    <% Cases::CaseRecord::STATUSES.each do |status| %>
+      <% count = @counts.fetch(status, 0) %>
+      <%= link_to "#{status.humanize} (#{count})",
+                  ops_cases_path(filters.merge("status" => status)),
+                  class: class_names("tab", "is-active" => @tab == status, "is-empty" => count.zero?) %>
     <% end %>
-    Page <%= @query.page %> of <%= @query.page_count %> (<%= @query.total_count %> Cases)
-    <% if @query.page < @query.page_count %>
-      <%= link_to "Next →", ops_cases_path(filters.merge("page" => @query.page + 1)) %>
-    <% end %>
+
+    <% all_total = @counts.values.sum %>
+    <%= link_to "All (#{all_total})",
+                ops_cases_path(filters.merge("status" => Ops::CasesController::ALL_TAB)),
+                class: class_names("tab", "is-active" => @tab == Ops::CasesController::ALL_TAB) %>
   </nav>
-<% end %>
+
+  <%# A GET form, so every filtered view is a URL somebody can send to a
+      colleague. The Apply button is real and works without JavaScript;
+      queue_controller hides it and submits on change instead. %>
+  <%= form_with url: ops_cases_path, method: :get, class: "filterbar",
+                data: { queue_target: "form" } do %>
+    <%= hidden_field_tag :status, @tab %>
+
+    <div class="<%= class_names("filter", "is-set" => params[:priority].present?) %>">
+      <%= label_tag :priority, "Priority" %>
+      <%= select_tag :priority,
+                     options_for_select(Ops::CaseQuery::PRIORITY_ORDER, params[:priority]),
+                     include_blank: "any", data: { action: "change->queue#applyFilters" } %>
+    </div>
+
+    <div class="<%= class_names("filter", "is-set" => params[:team].present?) %>">
+      <%= label_tag :team, "Team" %>
+      <%= select_tag :team,
+                     options_from_collection_for_select(assignment_options.teams, :id, :name, params[:team]) +
+                       options_for_select([ [ "unassigned", Ops::CaseQuery::UNASSIGNED ] ], params[:team]),
+                     include_blank: "any", data: { action: "change->queue#applyFilters" } %>
+    </div>
+
+    <div class="<%= class_names("filter", "is-set" => params[:owner].present?) %>">
+      <%= label_tag :owner, "Owner" %>
+      <%= select_tag :owner,
+                     options_from_collection_for_select(assignment_options.owners, :id, :email_address, params[:owner]) +
+                       options_for_select([ [ "unassigned", Ops::CaseQuery::UNASSIGNED ], [ "me", "me" ] ], params[:owner]),
+                     include_blank: "any", data: { action: "change->queue#applyFilters" } %>
+    </div>
+
+    <div class="filterbar-divider" aria-hidden="true"></div>
+
+    <div class="filter">
+      <%= label_tag :sort, "Sort" %>
+      <%= select_tag :sort,
+                     options_for_select(Ops::CaseQuery::SORTS.map { |key, s| [ s[:label], key ] }, @query.sort),
+                     data: { action: "change->queue#applyFilters" } %>
+    </div>
+
+    <span class="spacer"></span>
+
+    <%= submit_tag "Apply filters", class: "btn btn-sm", data: { queue_target: "apply" } %>
+    <% if filters.except("status").any? %>
+      <%= link_to "Clear", ops_cases_path(status: @tab), class: "btn btn-ghost btn-sm" %>
+    <% end %>
+  <% end %>
+
+  <p class="sort-explanation">Order: <%= @query.sort_explanation %></p>
+
+  <% if @cases.empty? %>
+    <div class="empty-state">
+      <strong>Nothing in the queue.</strong>
+      <% if filters.except("status").any? %>
+        No Case matches these filters. <%= link_to "Clear them", ops_cases_path(status: @tab) %>.
+      <% else %>
+        No <%= @tab == Ops::CasesController::ACTIVE_TAB ? "active" : @tab.humanize.downcase %>
+        Case needs attention right now.
+      <% end %>
+    </div>
+  <% else %>
+    <%# A grid rather than a <table>: when the Quick Review drawer opens, the
+        queue has to shed columns rather than crush twelve of them into half a
+        screen, and a container query can do that to a grid. Table semantics
+        are kept explicitly for assistive technology. %>
+    <div class="queue-wrap">
+      <div class="queue" role="table" aria-label="Case queue">
+        <div class="qhead" role="row">
+          <span class="qcell qcell-priority" role="columnheader">Priority</span>
+          <span class="qcell qcell-reason" role="columnheader">Work reason</span>
+          <span class="qcell qcell-status" role="columnheader">Status</span>
+          <span class="qcell qcell-age" role="columnheader">Age</span>
+          <span class="qcell qcell-owner" role="columnheader">Owner</span>
+          <span class="qcell qcell-analysis" role="columnheader">Analysis</span>
+          <span class="qcell qcell-quality" role="columnheader">Quality</span>
+          <span class="qcell qcell-actions" role="columnheader"><span class="visually-hidden">Actions</span></span>
+        </div>
+
+        <%= render partial: "ops/cases/case_row", collection: @cases, as: :case_record %>
+      </div>
+    </div>
+
+    <%# Pagination. Offset paging is honest about what it is; HO §86 says to
+        query the normalized tables directly until measurement says otherwise,
+        and not to preemptively build a read model. %>
+    <nav class="pagination" aria-label="Pagination">
+      <% if @query.page > 1 %>
+        <%= link_to "← Previous", ops_cases_path(filters.merge("page" => @query.page - 1)), class: "btn btn-sm" %>
+      <% end %>
+      <span class="pages">Page <%= @query.page %> of <%= @query.page_count %>
+        (<%= pluralize(@query.total_count, "Case") %>)</span>
+      <% if @query.page < @query.page_count %>
+        <%= link_to "Next →", ops_cases_path(filters.merge("page" => @query.page + 1)), class: "btn btn-sm" %>
+      <% end %>
+    </nav>
+  <% end %>
+</div>
+
+<%# Quick Review renders in here (HO §88). Empty until a row is opened; the
+    same Case is still a real page at /ops/cases/:id for linking and for
+    anyone without JavaScript. %>
+<div class="drawer" hidden
+     data-controller="drawer"
+     data-action="turbo:frame-load->drawer#opened keydown@document->drawer#escape">
+  <div class="drawer-scrim" data-action="click->drawer#close"></div>
+  <div class="drawer-panel" role="region" aria-label="Quick Review"
+       data-drawer-target="panel">
+    <%= turbo_frame_tag "case_drawer", data: { drawer_target: "frame" } %>
+  </div>
+</div>

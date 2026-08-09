@@ -1,0 +1,15 @@
+<nav class="rail" aria-label="Sections">
+  <div class="rail-label">Work</div>
+  <%= rail_item "Queue", ops_cases_path, match: "/ops" %>
+
+  <div class="rail-label">Organization</div>
+  <%= rail_item "Members", members_path %>
+  <%= rail_item "Invitations", invitations_path %>
+
+  <%# Platform staff only. Absent rather than disabled for everyone else: a
+      non-staff user should not learn the surface exists (HO §123). %>
+  <% if current_staff_member.present? %>
+    <div class="rail-label">Platform</div>
+    <%= rail_item "Admin", admin_root_path, match: "/admin" %>
+  <% end %>
+</nav>

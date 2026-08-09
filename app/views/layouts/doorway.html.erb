@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <%= render "layouts/head" %>
+  </head>
+
+  <%# Sign in, password reset, choosing a tenant and accepting an invitation.
+      Every other page in the application is a working surface; these are
+      doorways, and they get no rail, no tenant chrome and no navigation —
+      there is nowhere to navigate to yet. %>
+  <body>
+    <div class="doorway">
+      <div class="doorway-inner">
+        <div class="doorway-brand">
+          <span class="brand-mark" aria-hidden="true"></span>
+          <span>healthos</span>
+        </div>
+        <p class="doorway-tagline">Provider health observability</p>
+
+        <%= render "layouts/flash" %>
+        <%= yield %>
+      </div>
+    </div>
+  </body>
+</html>

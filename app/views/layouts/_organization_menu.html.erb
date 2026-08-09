@@ -1,0 +1,31 @@
+<%# The active tenant, always visible. Which organization you are looking at
+    is the most consequential piece of context on the screen — every query on
+    every page is scoped by it (HO §12) — so it sits in the top bar rather
+    than inside a page heading where it reads as decoration. %>
+<% memberships = Current.user&.usable_memberships.to_a %>
+
+<% if memberships.length > 1 %>
+  <div class="menu" data-controller="menu">
+    <button type="button" class="menu-trigger" aria-expanded="false" aria-haspopup="true"
+            data-menu-target="trigger" data-action="menu#toggle">
+      <span class="topbar-org"><%= Current.organization.name %></span>
+    </button>
+
+    <div class="menu-panel" role="menu" hidden data-menu-target="panel">
+      <div class="menu-head">
+        <strong>Switch organization</strong>
+        <span>Everything you see is scoped to this tenant.</span>
+      </div>
+
+      <% memberships.each do |membership| %>
+        <%= button_to membership.organization.name,
+                      choose_organization_path(organization_id: membership.organization_id),
+                      form_class: "menu-form",
+                      class: class_names("menu-item",
+                                         "is-current" => membership.organization_id == Current.organization.id) %>
+      <% end %>
+    </div>
+  </div>
+<% else %>
+  <span class="topbar-org"><%= Current.organization.name %></span>
+<% end %>

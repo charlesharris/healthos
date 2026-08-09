@@ -1,0 +1,11 @@
+<%# The drawer's frame, re-rendered after an action taken inside it. The
+    Stimulus target has to survive the replace or the panel loses its close
+    behaviour. %>
+<%= turbo_frame_tag "case_drawer", data: { drawer_target: "frame" } do %>
+  <%= render "ops/cases/review",
+             case_record: case_record,
+             trigger_attachments: trigger_attachments,
+             other_attachments: other_attachments,
+             timeline: timeline,
+             drawer: true %>
+<% end %>
