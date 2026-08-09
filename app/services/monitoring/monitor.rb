@@ -23,7 +23,11 @@ module Monitoring
     end
 
     MONITORS = {
-      "blood_pressure_trajectory_change" => "Hypertension::TrajectoryChangeMonitor"
+      "blood_pressure_trajectory_change" => "Hypertension::TrajectoryChangeMonitor",
+      "blood_pressure_threshold_excursion" => "Hypertension::ThresholdExcursionMonitor",
+      "blood_pressure_variability_change" => "Hypertension::VariabilityChangeMonitor",
+      "measurement_frequency_change" => "Hypertension::MeasurementFrequencyChangeMonitor",
+      "measurement_source_change" => "Hypertension::SourceChangeMonitor"
     }.freeze
 
     class << self

@@ -52,12 +52,12 @@ Epic 003); S2C-004→017, S2C-023, S2C-025.
       the 001-09 daily summary over a narrower window — no new algorithm)
 
 ### Monitor pack breadth (Milestone 3)
-- [ ] 002-07 Threshold-excursion monitor (fixture thresholds,
+- [x] 002-07 Threshold-excursion monitor (fixture thresholds,
       NON-CLINICAL)
-- [ ] 002-08 Variability-change monitor
-- [ ] 002-09 Measurement-frequency-change monitor
-- [ ] 002-10 Source/method-change monitor
-- [ ] 002-11 Per-org monitor configuration honored (enable/disable,
+- [x] 002-08 Variability-change monitor
+- [x] 002-09 Measurement-frequency-change monitor (drop-only — see log)
+- [x] 002-10 Source/method-change monitor
+- [x] 002-11 Per-org monitor configuration honored (enable/disable,
       parameters) (§31)
 
 ### Case model completion (Milestone 4)
@@ -109,6 +109,55 @@ land), bulk clinical actions.
       under concurrency, no hidden source changes
 
 ## Decision Log
+
+### 2026-08-09 — 002-07 to 002-11 monitor pack
+
+Built by a sub-agent against the trajectory monitor as reference;
+reviewed and verified here before commit. 62 monitoring examples.
+
+**The STAT-044 guard is now mechanical and provably discriminating.**
+Two specs read the pack's source with comments stripped and fail on
+(a) any of the contract's evidence bands — 0.3, 0.5, 0.25, 25, 30, 40,
+50, 60, 80 — and (b) any comparison against a bare number, so every
+threshold must be a named parameter that lands in the monitor digest.
+Verified by deliberately injecting both violations into a monitor and
+confirming both specs fail, then restoring. A guard that cannot be shown
+to fail is not a guard.
+
+**The `SourceChangeMonitor`'s fixture share sits deliberately below both
+SC §11 bands.** Surfacing a candidate for a human to look at and rating
+statistical evidence are different jobs in different places; a monitor
+that fired exactly at 30% would blur them and put a governed value in
+the wrong file.
+
+**A cadence-denominator bug avoided, worth recording.** The obvious move
+was to reuse `Derivation::MeasurementBehavior::Frequency` for the
+recent-versus-baseline rate. Its `window_days` counts calendar dates
+touched, which is right for a day-aligned derived signal but wrong for
+the monitors' rolling windows ending mid-day: a 7×24h recent window
+touches 8 dates and a 21-day baseline touches 22, so the two sides get
+scaled by different factors and the ratio is distorted. The monitor
+divides by its configured span instead. **Open question for review:**
+day-aligning monitor windows would let the algorithm be reused and
+remove the duplication — worth deciding before more monitors arrive.
+
+**Frequency fires on drops only.** 002-09 is named
+"measurement-frequency-change", but the work it correlates into is
+`monitoring_interruption` (HO §42), which a cadence *increase* is not.
+Direction is still part of the dedup identity, so adding the other
+direction later cannot collapse two events onto one key, and a spec
+asserts silence on a rise.
+
+**What each monitor refuses to claim** is documented in its own
+docstring — the variability monitor cannot distinguish a subject whose
+spread widened from a new cuff, a different arm, or a different
+operator; the frequency monitor cannot distinguish a broken device from
+a holiday. Saying so in the file is what keeps a Signal a reason to look
+rather than a finding.
+
+An org-level parameter override deliberately does **not** move the
+monitor digest, which is HO §31's "customer policy without changing code
+definition identity", asserted by spec.
 
 ### 2026-08-09 — PHI leakage test (epic 001 gate item, now closed)
 
