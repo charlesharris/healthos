@@ -161,6 +161,15 @@ jobs:
       - name: Run tests
         run: bin/rspec
 
+      # HO §120 asks for the correlation concurrency test to run repeatedly,
+      # because a lock bug is intermittent by nature — a single green run
+      # proves very little. The savepoint bug this spec found passed a
+      # sequential suite perfectly.
+      - name: Concurrency loop (HO §120)
+        env:
+          CORRELATION_LOOP_RUNS: 20
+        run: bin/rspec spec/cases/correlation_concurrency_spec.rb
+
   # The Dockerfile is not exercised by docker-compose in development (see the
   # epic 001-01 Decision Log), so build it here to stop it rotting.
   build_image:

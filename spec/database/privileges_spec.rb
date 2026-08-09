@@ -2,12 +2,8 @@
 
 require "rails_helper"
 
-# Owner-level connection used only by the enforcement-mechanism specs below,
-# which need to CREATE and GRANT. Kept separate from ActiveRecord::Base so the
-# rest of the suite keeps running as the unprivileged healthos_app role.
-class MigratorConnection < ActiveRecord::Base
-  self.abstract_class = true
-end
+# MigratorConnection lives in spec/support/migrator_connection.rb — several
+# specs need an owner-level connection now, not just this one.
 
 # ADR-002 Decision 4a — append-only enforced by privilege revocation.
 #

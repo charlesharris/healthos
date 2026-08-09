@@ -138,16 +138,16 @@ semantics in Epic 002); provenance invariants 1–3.
       immutable (S2C-001)
 
 ### 001-11 Case correlation + Case
-- [ ] `case_correlation_scopes` with unique (org, subject, domain);
+- [x] `case_correlation_scopes` with unique (org, subject, domain);
       `Cases::CorrelateSignal` using SELECT ... FOR UPDATE (§35)
-- [ ] `cases` per §36 (no STI), `case_signals` unique
+- [x] `cases` per §36 (no STI), `case_signals` unique
       (case, signal), `case_events` append-only (§38–39)
-- [ ] Correlation contract §40 for the single case type
+- [x] Correlation contract §40 for the single case type
       `blood_pressure_change`; ambiguity → new Case +
       `correlation_ambiguous` (S2C-008)
-- [ ] Concurrency spec (must pass, §120): 3 near-simultaneous
+- [x] Concurrency spec (must pass, §120): 3 near-simultaneous
       compatible Signals, 3 concurrent jobs → 1 Case, 3 CaseSignals,
-      complete CaseEvent history (S2C-005/006/007)
+      complete CaseEvent history (S2C-005/006/007) — runs 20x in CI
 
 ### 001-12 Ops Queue row (read-only v0)
 - [ ] `Ops::CaseQuery` (org + user context required)
@@ -847,3 +847,56 @@ original rise.
 One spec had to be rewritten because it tried to `delete_all` derived
 signals to reshape a scenario — the append-only grants refused it,
 correctly. Replaced with a second subject.
+
+### 2026-08-09 — 001-11 case correlation
+
+**The concurrency spec found a real bug, which is the entire reason
+HO §120 makes it must-pass.** Under contention two threads race to
+create the same `case_correlation_scope`; one loses on the unique index,
+and in PostgreSQL **a failed statement aborts the whole enclosing
+transaction**. The `rescue RecordNotUnique` therefore could not recover
+— every subsequent statement failed with `InFailedSqlTransaction` and
+the correlation died outright. Fixed by wrapping the create in
+`transaction(requires_new: true)` so only a SAVEPOINT rolls back.
+
+This is worth dwelling on: the sequential suite passed perfectly
+throughout. Nothing short of genuinely concurrent threads would have
+surfaced it, and in production it would have appeared as intermittent
+correlation failures under load.
+
+**The spec uses real threads on real connections**, with transactional
+fixtures off and a `Queue` barrier so all three threads enter the
+critical section together. Without the barrier they serialize naturally,
+the lock is never contended, and the spec passes while proving nothing.
+CI runs it 20 times (`CORRELATION_LOOP_RUNS`), because a lock bug is
+intermittent by nature.
+
+**A second hash-chain bug, also found rather than reasoned about.**
+`CaseEvent.chain_intact?` returned false immediately, because the digest
+was computed before the database round trip: JSONB does not preserve key
+order, and PostgreSQL `timestamp(6)` *truncates* microseconds while
+Ruby's `iso8601(6)` *rounds*. Both fixed by canonicalizing the payload
+and formatting with `%6N`. A chain that always reports itself broken is
+worse than no chain — it makes real tampering indistinguishable from
+noise.
+
+**`Cases::CaseRecord`, not `Case`.** `case` is a Ruby keyword and
+`Cases::Case` reads badly; the table stays `cases`, which is what the
+handover and every index reference. Same class of problem as
+`Monitoring::Signal`.
+
+**Ambiguity creates a new Case and records why** (S2C-008, HO §41). A
+silent merge would attach evidence to a Case it may not belong to and
+leave no trace that a choice was made. The `correlation_ambiguous` event
+carries the candidate case ids and the resolution.
+
+**Priority is defaulted with a stated reason**, not silently assigned.
+The real policy is 002-16; until then `priority_reasons` records
+`default_pending_priority_policy` so no Case ever carries an unexplained
+ranking (S2C-011/012).
+
+**Domain boundary is spec-enforced** (S2C-025): a spec strips comments
+from `app/services/cases/**` and fails on any occurrence of
+`blood_pressure`, `hypertension`, `mmHg`, or a hard-coded window. The
+rules object is injected, so platform core carries no disease
+vocabulary.

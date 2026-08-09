@@ -39,6 +39,7 @@ append_only:
 
   # Case history — S2C-010 append-only timeline; S2C-016 reopen preserves
   - case_events
+  - case_signals              # S2C-009: an attachment is a historical fact
   - case_dispositions
 
   # Analysis artifacts — HO §50 "completed ... immutable analytical artifacts"

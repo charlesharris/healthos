@@ -47,6 +47,100 @@ CREATE TABLE public.audit_events (
 
 
 --
+-- Name: case_correlation_scopes; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.case_correlation_scopes (
+    id uuid DEFAULT uuidv7() NOT NULL,
+    organization_id uuid NOT NULL,
+    subject_id uuid NOT NULL,
+    domain_key text NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL
+);
+
+
+--
+-- Name: case_events; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.case_events (
+    id uuid DEFAULT uuidv7() NOT NULL,
+    organization_id uuid NOT NULL,
+    case_id uuid NOT NULL,
+    event_type text NOT NULL,
+    actor_type text DEFAULT 'system'::text NOT NULL,
+    actor_id uuid,
+    occurred_at timestamp(6) without time zone NOT NULL,
+    payload jsonb DEFAULT '{}'::jsonb NOT NULL,
+    prev_hash text,
+    row_hash text,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL
+);
+
+
+--
+-- Name: case_signals; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.case_signals (
+    id uuid DEFAULT uuidv7() NOT NULL,
+    organization_id uuid NOT NULL,
+    case_id uuid NOT NULL,
+    signal_id uuid NOT NULL,
+    relationship text DEFAULT 'trigger'::text NOT NULL,
+    attached_at timestamp(6) without time zone NOT NULL,
+    explanation jsonb DEFAULT '{}'::jsonb NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT case_signals_relationship_check CHECK ((relationship = ANY (ARRAY['trigger'::text, 'supporting'::text, 'contextual'::text, 'reopening'::text])))
+);
+
+
+--
+-- Name: cases; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.cases (
+    id uuid DEFAULT uuidv7() NOT NULL,
+    public_id text NOT NULL,
+    organization_id uuid NOT NULL,
+    subject_id uuid NOT NULL,
+    domain_key text NOT NULL,
+    case_type text NOT NULL,
+    title text,
+    summary text,
+    status text DEFAULT 'new'::text NOT NULL,
+    review_priority text DEFAULT 'routine'::text NOT NULL,
+    priority_reasons jsonb DEFAULT '[]'::jsonb NOT NULL,
+    owner_id uuid,
+    team_id uuid,
+    started_at timestamp(6) without time zone NOT NULL,
+    detected_at timestamp(6) without time zone NOT NULL,
+    last_signal_at timestamp(6) without time zone,
+    evidence_level text,
+    data_quality_state text,
+    baseline_maturity text,
+    analysis_status text DEFAULT 'not_started'::text NOT NULL,
+    analysis_as_of timestamp(6) without time zone,
+    current_context_id uuid,
+    current_baseline_instance_id uuid,
+    current_comparison_id uuid,
+    top_finding_id uuid,
+    last_reviewed_at timestamp(6) without time zone,
+    watch_until timestamp(6) without time zone,
+    resolved_at timestamp(6) without time zone,
+    lock_version integer DEFAULT 0 NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT cases_analysis_status_check CHECK ((analysis_status = ANY (ARRAY['not_started'::text, 'pending'::text, 'current'::text, 'stale'::text, 'failed'::text, 'insufficient_evidence'::text]))),
+    CONSTRAINT cases_review_priority_check CHECK ((review_priority = ANY (ARRAY['now'::text, 'today'::text, 'routine'::text, 'watch'::text]))),
+    CONSTRAINT cases_status_check CHECK ((status = ANY (ARRAY['new'::text, 'triaged'::text, 'investigating'::text, 'watching'::text, 'waiting_external'::text, 'resolved'::text, 'dismissed'::text])))
+);
+
+
+--
 -- Name: derived_signals; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -588,6 +682,38 @@ ALTER TABLE ONLY public.audit_events
 
 
 --
+-- Name: case_correlation_scopes case_correlation_scopes_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.case_correlation_scopes
+    ADD CONSTRAINT case_correlation_scopes_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: case_events case_events_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.case_events
+    ADD CONSTRAINT case_events_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: case_signals case_signals_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.case_signals
+    ADD CONSTRAINT case_signals_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: cases cases_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.cases
+    ADD CONSTRAINT cases_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: derived_signals derived_signals_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -835,6 +961,153 @@ CREATE INDEX index_audit_events_on_staff_member_id ON public.audit_events USING 
 --
 
 CREATE INDEX index_audit_events_on_type_and_time ON public.audit_events USING btree (event_type, occurred_at);
+
+
+--
+-- Name: index_case_correlation_scopes_identity; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_case_correlation_scopes_identity ON public.case_correlation_scopes USING btree (organization_id, subject_id, domain_key);
+
+
+--
+-- Name: index_case_correlation_scopes_on_organization_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_case_correlation_scopes_on_organization_id ON public.case_correlation_scopes USING btree (organization_id);
+
+
+--
+-- Name: index_case_correlation_scopes_on_subject_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_case_correlation_scopes_on_subject_id ON public.case_correlation_scopes USING btree (subject_id);
+
+
+--
+-- Name: index_case_events_on_case_and_time; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_case_events_on_case_and_time ON public.case_events USING btree (case_id, occurred_at);
+
+
+--
+-- Name: index_case_events_on_case_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_case_events_on_case_id ON public.case_events USING btree (case_id);
+
+
+--
+-- Name: index_case_events_on_org_type_time; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_case_events_on_org_type_time ON public.case_events USING btree (organization_id, event_type, occurred_at);
+
+
+--
+-- Name: index_case_events_on_organization_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_case_events_on_organization_id ON public.case_events USING btree (organization_id);
+
+
+--
+-- Name: index_case_signals_on_case_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_case_signals_on_case_id ON public.case_signals USING btree (case_id);
+
+
+--
+-- Name: index_case_signals_on_organization_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_case_signals_on_organization_id ON public.case_signals USING btree (organization_id);
+
+
+--
+-- Name: index_case_signals_on_signal; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_case_signals_on_signal ON public.case_signals USING btree (signal_id);
+
+
+--
+-- Name: index_case_signals_on_signal_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_case_signals_on_signal_id ON public.case_signals USING btree (signal_id);
+
+
+--
+-- Name: index_case_signals_unique; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_case_signals_unique ON public.case_signals USING btree (case_id, signal_id);
+
+
+--
+-- Name: index_cases_on_org_owner_status; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_cases_on_org_owner_status ON public.cases USING btree (organization_id, owner_id, status);
+
+
+--
+-- Name: index_cases_on_org_status_priority_time; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_cases_on_org_status_priority_time ON public.cases USING btree (organization_id, status, review_priority, detected_at);
+
+
+--
+-- Name: index_cases_on_org_subject_domain_status; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_cases_on_org_subject_domain_status ON public.cases USING btree (organization_id, subject_id, domain_key, status);
+
+
+--
+-- Name: index_cases_on_org_team_status_priority; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_cases_on_org_team_status_priority ON public.cases USING btree (organization_id, team_id, status, review_priority);
+
+
+--
+-- Name: index_cases_on_organization_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_cases_on_organization_id ON public.cases USING btree (organization_id);
+
+
+--
+-- Name: index_cases_on_organization_id_and_public_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_cases_on_organization_id_and_public_id ON public.cases USING btree (organization_id, public_id);
+
+
+--
+-- Name: index_cases_on_owner_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_cases_on_owner_id ON public.cases USING btree (owner_id);
+
+
+--
+-- Name: index_cases_on_subject_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_cases_on_subject_id ON public.cases USING btree (subject_id);
+
+
+--
+-- Name: index_cases_on_team_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_cases_on_team_id ON public.cases USING btree (team_id);
 
 
 --
@@ -1562,6 +1835,14 @@ ALTER TABLE ONLY public.raw_envelopes
 
 
 --
+-- Name: case_events fk_rails_07cba11f9a; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.case_events
+    ADD CONSTRAINT fk_rails_07cba11f9a FOREIGN KEY (case_id) REFERENCES public.cases(id);
+
+
+--
 -- Name: evidence_sets fk_rails_0b249d477f; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1599,6 +1880,14 @@ ALTER TABLE ONLY public.events
 
 ALTER TABLE ONLY public.observations
     ADD CONSTRAINT fk_rails_1b0021e77f FOREIGN KEY (raw_envelope_id) REFERENCES public.raw_envelopes(id);
+
+
+--
+-- Name: case_signals fk_rails_1cf1caeb0a; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.case_signals
+    ADD CONSTRAINT fk_rails_1cf1caeb0a FOREIGN KEY (case_id) REFERENCES public.cases(id);
 
 
 --
@@ -1802,6 +2091,14 @@ ALTER TABLE ONLY public.sessions
 
 
 --
+-- Name: case_signals fk_rails_7aeeb938f9; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.case_signals
+    ADD CONSTRAINT fk_rails_7aeeb938f9 FOREIGN KEY (signal_id) REFERENCES public.signals(id);
+
+
+--
 -- Name: subject_identifiers fk_rails_7d53575fbf; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1818,11 +2115,27 @@ ALTER TABLE ONLY public.staff_members
 
 
 --
+-- Name: case_signals fk_rails_8429d96d34; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.case_signals
+    ADD CONSTRAINT fk_rails_8429d96d34 FOREIGN KEY (organization_id) REFERENCES public.organizations(id);
+
+
+--
 -- Name: domain_events fk_rails_8afe43432b; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.domain_events
     ADD CONSTRAINT fk_rails_8afe43432b FOREIGN KEY (organization_id) REFERENCES public.organizations(id);
+
+
+--
+-- Name: cases fk_rails_8ffced78ef; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.cases
+    ADD CONSTRAINT fk_rails_8ffced78ef FOREIGN KEY (subject_id) REFERENCES public.subjects(id);
 
 
 --
@@ -1847,6 +2160,22 @@ ALTER TABLE ONLY public.subjects
 
 ALTER TABLE ONLY public.derived_signals
     ADD CONSTRAINT fk_rails_9d20e5fb0b FOREIGN KEY (subject_id) REFERENCES public.subjects(id);
+
+
+--
+-- Name: case_correlation_scopes fk_rails_a2f11c5c85; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.case_correlation_scopes
+    ADD CONSTRAINT fk_rails_a2f11c5c85 FOREIGN KEY (organization_id) REFERENCES public.organizations(id);
+
+
+--
+-- Name: cases fk_rails_a2f743c059; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.cases
+    ADD CONSTRAINT fk_rails_a2f743c059 FOREIGN KEY (organization_id) REFERENCES public.organizations(id);
 
 
 --
@@ -1906,6 +2235,14 @@ ALTER TABLE ONLY public.observation_groups
 
 
 --
+-- Name: case_events fk_rails_c792ddd48a; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.case_events
+    ADD CONSTRAINT fk_rails_c792ddd48a FOREIGN KEY (organization_id) REFERENCES public.organizations(id);
+
+
+--
 -- Name: observation_groups fk_rails_caaaf09583; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1919,6 +2256,22 @@ ALTER TABLE ONLY public.observation_groups
 
 ALTER TABLE ONLY public.signals
     ADD CONSTRAINT fk_rails_cebf70b0e3 FOREIGN KEY (organization_id) REFERENCES public.organizations(id);
+
+
+--
+-- Name: cases fk_rails_d042fd9680; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.cases
+    ADD CONSTRAINT fk_rails_d042fd9680 FOREIGN KEY (team_id) REFERENCES public.teams(id);
+
+
+--
+-- Name: cases fk_rails_d192f7ddcd; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.cases
+    ADD CONSTRAINT fk_rails_d192f7ddcd FOREIGN KEY (owner_id) REFERENCES public.users(id);
 
 
 --
@@ -1943,6 +2296,14 @@ ALTER TABLE ONLY public.audit_events
 
 ALTER TABLE ONLY public.devices
     ADD CONSTRAINT fk_rails_de2d742c51 FOREIGN KEY (subject_id) REFERENCES public.subjects(id);
+
+
+--
+-- Name: case_correlation_scopes fk_rails_e7c8800882; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.case_correlation_scopes
+    ADD CONSTRAINT fk_rails_e7c8800882 FOREIGN KEY (subject_id) REFERENCES public.subjects(id);
 
 
 --
@@ -2016,6 +2377,7 @@ ALTER TABLE ONLY public.intervals
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20260809140000'),
 ('20260809130000'),
 ('20260809120100'),
 ('20260809120000'),

@@ -20,7 +20,8 @@ module Outbox
     #   "monitoring.signal_created" => "Cases::CorrelateSignalJob"   (001-11)
     #   "cases.case_analysis_requested" => "Analysis::BuildCaseAnalysisJob" (003-22)
     DEFAULT_HANDLERS = {
-      "ingestion.envelope_received" => "Normalization::NormalizeEnvelopeJob"
+      "ingestion.envelope_received" => "Normalization::NormalizeEnvelopeJob",
+      "monitoring.signal_created" => "Cases::CorrelateSignalJob"
     }.freeze
 
     class << self
